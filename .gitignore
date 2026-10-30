@@ -1,0 +1,22 @@
+# bağımlılıklar ve derleme çıktıları
+node_modules/
+.expo/
+app/android/
+app/ios/
+*.apk
+*.aab
+__pycache__/
+*.pyc
+venv/
+
+# kişisel veri: ASLA repoya girmez
+veri/
+*.db
+anahtar
+*.env
+wa-oturum*/
+sohbet-listesi.txt
+eval/v2-*.json
+eval/sonuc-*.json
+models/
+*.gguf
