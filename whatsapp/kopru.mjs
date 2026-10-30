@@ -18,12 +18,10 @@ const HARIC_YOL = path.join(VERI, 'haric.json');
 const HARIC_ONAY = path.join(VERI, 'haric-onaylandi');
 const ADLAR_YOL = path.join(VERI, 'wa-adlar.json');          // sadece sohbet adları
 const GECMIS_HAM = path.join(VERI, 'wa-gecmis-bekleyen.jsonl'); // onaydan önce gelen geçmiş; onaydan sonra süzülüp silinir
-const GECMIS_TAMAM = path.join(VERI, 'wa-gecmis-alindi');
 const TULPAR = 'http://127.0.0.1:8090';
 // sahibin adı (repoda değil): ~/tulpar/veri/sahip.json
 let SAHIP = 'Kullanıcı';
 try { SAHIP = JSON.parse(fs.readFileSync(path.join(VERI, 'sahip.json'), 'utf8')).ad || SAHIP; } catch (_) {}
-const GECMIS_LIMIT = 300;
 
 const log = (m) => { try { execFileSync('logger', ['-t', 'tulpar', m]); } catch (_) {} console.log(m); };
 const onayli = () => fs.existsSync(HARIC_ONAY);
@@ -98,31 +96,32 @@ function donustur(msg, gecmis = false) {
   };
 }
 
-async function gecmisiIsle() {
-  if (fs.existsSync(GECMIS_TAMAM) || !fs.existsSync(GECMIS_HAM)) return;
-  while (!onayli()) await bekle(10000);
-  const sayac = {};
-  let gonderilen = 0;
-  const satirlar = fs.readFileSync(GECMIS_HAM, 'utf8').split('\n').filter(Boolean).map((s) => JSON.parse(s))
-    .sort((a, b) => b.zaman - a.zaman);  // en yeniler önce, sohbet başına GECMIS_LIMIT
-  for (const m of satirlar) {
+// Geçmiş: hariç tutma onaylandıysa doğrudan (hariç tutulanlar elenerek) Tulpar'a gider; onaydan önce gelen
+// kısım diskte bekler, onaydan sonra süzülüp gönderilir ve ham dosya silinir. Medya indirilmez, sadece metin.
+let gecmisSayac = 0;
+async function gecmisGonder(mesajlar) {
+  for (const m of mesajlar) {
     if (haricMi(m.sohbet_id)) continue;
-    sayac[m.sohbet_id] = (sayac[m.sohbet_id] || 0) + 1;
-    if (sayac[m.sohbet_id] > GECMIS_LIMIT) continue;
     m.sohbet_adi = ad(m.sohbet_id);
     await tulparaGonder(m);
-    gonderilen++;
+    if (++gecmisSayac % 2000 === 0) log(`WhatsApp gecmisi aliniyor: ${gecmisSayac} mesaj`);
   }
+}
+
+async function bekleyenGecmisiIsle() {
+  if (!fs.existsSync(GECMIS_HAM)) return;
+  while (!onayli()) await bekle(10000);
+  const satirlar = fs.readFileSync(GECMIS_HAM, 'utf8').split('\n').filter(Boolean).map((s) => JSON.parse(s));
+  await gecmisGonder(satirlar);
   fs.unlinkSync(GECMIS_HAM);  // hariç tutulanlar dahil ham geçmiş tamamen silinir
-  fs.writeFileSync(GECMIS_TAMAM, new Date().toISOString());
-  log(`WhatsApp gecmisi alindi: ${gonderilen} mesaj, ${Object.keys(sayac).length} sohbet`);
+  log(`WhatsApp bekleyen gecmis islendi: ${satirlar.length} satir`);
 }
 
 async function baglan() {
   const { state, saveCreds } = await useMultiFileAuthState(path.join(VERI, 'wa-oturum-baileys'));
   sock = makeWASocket({
-    auth: state, logger: pino({ level: 'silent' }), browser: Browsers.ubuntu('Tulpar'),
-    markOnlineOnConnect: false, syncFullHistory: false,
+    auth: state, logger: pino({ level: 'silent' }), browser: Browsers.ubuntu('Desktop'),  // masaüstü kimliği: WhatsApp tam geçmişi buna gönderir
+    markOnlineOnConnect: false, syncFullHistory: true,
   });
   sock.ev.on('creds.update', saveCreds);
   sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
@@ -141,7 +140,7 @@ async function baglan() {
       } catch (e) { log(`HATA grup adlari: ${e.message}`); }
       sohbetListesiYaz();
       log(`WhatsApp sohbet listesi: ${Object.keys(adlar).length} sohbet`);
-      gecmisiIsle().catch((e) => log(`HATA gecmis: ${e.message}`));
+      bekleyenGecmisiIsle().catch((e) => log(`HATA gecmis: ${e.message}`));
     }
     if (connection === 'close') {
       const kod = lastDisconnect?.error?.output?.statusCode;
@@ -157,12 +156,16 @@ async function baglan() {
   });
   sock.ev.on('contacts.upsert', (kisiler) => { for (const k of kisiler) adKaydet(k.id, k.name || k.notify, false); });
   sock.ev.on('chats.upsert', (sohbetler) => { for (const c of sohbetler) adKaydet(c.id, c.name, isJidGroup(c.id)); });
-  sock.ev.on('messaging-history.set', ({ chats, contacts, messages }) => {
+  sock.ev.on('messaging-history.set', async ({ chats, contacts, messages, isLatest, progress }) => {
     for (const k of contacts || []) adKaydet(k.id, k.name || k.notify, false);
     for (const c of chats || []) adKaydet(c.id, c.name, isJidGroup(c.id));
-    if (fs.existsSync(GECMIS_TAMAM)) return;
-    const satirlar = (messages || []).map((m) => donustur(m, true)).filter(Boolean).map((m) => JSON.stringify(m));
-    if (satirlar.length) fs.appendFileSync(GECMIS_HAM, satirlar.join('\n') + '\n', { mode: 0o600 });
+    const donusen = (messages || []).map((m) => donustur(m, true)).filter(Boolean);
+    if (!onayli()) {
+      if (donusen.length) fs.appendFileSync(GECMIS_HAM, donusen.map((m) => JSON.stringify(m)).join('\n') + '\n', { mode: 0o600 });
+    } else {
+      await gecmisGonder(donusen);
+    }
+    log(`WhatsApp gecmis parcasi: ${donusen.length} mesaj${progress != null ? `, %${progress}` : ''}${isLatest ? ' (son)' : ''}`);
   });
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify' && type !== 'append') return;
