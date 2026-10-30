@@ -69,14 +69,13 @@ def sohbet_ornekleri(mesajlar, kart, grup):
     takma, adlar = {}, {}
     for a in sahip.ADLAR + [sahip.AD]:
         adlar[a] = "[ben]"
-    harf = iter("ABCDEFGHIJKLMNOPRSTUVYZ" * 4)
 
     def kim(m):
         if m["benden"]:
             return "Ben"
         anahtar = m["gonderen_adi"] or "?"
         if anahtar not in takma:
-            takma[anahtar] = f"Kişi {next(harf)}" if grup else "Karşı taraf"
+            takma[anahtar] = f"Kişi {len(takma) + 1}" if grup else "Karşı taraf"
             if ilk_ad(anahtar) and len(ilk_ad(anahtar)) > 2:
                 adlar[ilk_ad(anahtar)] = takma[anahtar]
         return takma[anahtar]
