@@ -21,9 +21,9 @@ CIKTI = VERI / "egitim"
 BAGLAM = 15
 BIRLESTIR_SN = 300
 BAGLAM_PENCERE_SN = 12 * 3600
-SADE_CEVAP_ORANI = 0.15
+SADE_CEVAP_ORANI = 0.6  # tek kelimelik cevapların bu kadarı tutulur: kısalık üslubun parçası, ama baskın olmasın
 EN_UZUN_CEVAP = 800       # daha uzunu genelde yapıştırılmış/iletilmiş metin, konuşma dili değil
-AYNI_CEVAP_EN_FAZLA = 10  # "Tamamdır" gibi aynı cevap en fazla bu kadar örnekte
+AYNI_CEVAP_EN_FAZLA = 30  # aynı cevap ("Tamamdır") en fazla bu kadar örnekte: sıklık korunur, model tek kalıba saplanmaz
 # metin içinde geçen gerçek adların yerine (gizlilik için) tutarlı sahte adlar; konuşma doğal kalsın
 SAHTE_ADLAR = ["Ahmet", "Ayşe", "Mehmet", "Zeynep", "Emre", "Elif", "Burak", "Selin", "Mert", "Ece", "Can", "Deniz",
                "Kerem", "Defne", "Onur", "Buse", "Arda", "İrem", "Kaan", "Duru", "Berk", "Ezgi", "Ozan", "Cansu"]
