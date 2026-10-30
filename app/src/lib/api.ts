@@ -1,6 +1,7 @@
 // Tulpar sunucusuyla konuşma. Adres ve anahtar telefonda güvenli depoda (SecureStore) durur.
 import * as SecureStore from 'expo-secure-store';
 import { File } from 'expo-file-system';
+import { fetch as akisFetch } from 'expo/fetch';
 
 export type Ayar = { adres: string; anahtar: string; yedek?: string };  // yedek: ev ağı adresi (Tailscale çalışmazsa)
 
@@ -36,7 +37,7 @@ export async function sunucuMakinesi(): Promise<string | null> {
 }
 
 /** Adresleri sırayla dener: önce en son çalışan, sonra Tailscale, sonra ev ağı. */
-async function getir(a: Ayar, yol: string, init: RequestInit, zamanAsimi: number): Promise<Response> {
+async function getir(a: Ayar, yol: string, init: RequestInit, zamanAsimi: number, getirici: (u: string, i: any) => Promise<any> = fetch): Promise<Response> {
   const adresler = [...new Set([calisanAdres, a.adres, a.yedek].filter(Boolean) as string[])];
   let sonHata: unknown;
   for (const [i, adres] of adresler.entries()) {
@@ -44,7 +45,7 @@ async function getir(a: Ayar, yol: string, init: RequestInit, zamanAsimi: number
     // son aday dışındakilere kısa süre: ulaşılamıyorsa hızlıca diğerine geç
     const z = setTimeout(() => kontrol.abort(), i === adresler.length - 1 ? zamanAsimi : Math.min(zamanAsimi, 6000));
     try {
-      const y = await fetch(adres + yol, { ...init, signal: kontrol.signal });
+      const y = await getirici(adres + yol, { ...init, signal: kontrol.signal });
       calisanAdres = adres;
       return y;
     } catch (e) {
@@ -66,6 +67,34 @@ export async function istek<T = any>(yol: string, govde?: unknown, zamanAsimi = 
   }, zamanAsimi);
   if (!y.ok) throw new Error(`${y.status}: ${(await y.text()).slice(0, 200)}`);
   return (await y.json()) as T;
+}
+
+export type AkisOlay = { tur: 'eylem' | 'parca' | 'hata' | 'son'; metin?: string; eylem?: { tur: string; id: number } | null; arac?: string };
+
+/** Anlık konuşma: cevap üretildikçe her satırı (olayı) geri çağırır. */
+export async function konusAkis(metin: string, olay: (o: AkisOlay) => void): Promise<void> {
+  const a = await ayarOku();
+  if (!a) throw new Error('Sunucu ayarı yok');
+  const y = await getir(a, '/konus-akis', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-tulpar-anahtar': a.anahtar },
+    body: JSON.stringify({ metin }),
+  }, 200000, akisFetch);
+  if (!y.ok || !y.body) throw new Error(`konuşma ${y.status}`);
+  const okuyucu = y.body.getReader();
+  const cozucu = new TextDecoder();
+  let tampon = '';
+  for (;;) {
+    const { done, value } = await okuyucu.read();
+    if (done) break;
+    tampon += cozucu.decode(value, { stream: true });
+    let i;
+    while ((i = tampon.indexOf('\n')) >= 0) {
+      const satir = tampon.slice(0, i).trim();
+      tampon = tampon.slice(i + 1);
+      if (satir) olay(JSON.parse(satir));
+    }
+  }
 }
 
 /** Ses kaydını sunucuya yollar, yazıya dökülmüş metni döner (ses HP'de işlenip silinir). */

@@ -21,7 +21,9 @@ export default function AnaEkran() {
   const [yukleniyor, setYukleniyor] = useState(false);
   const basili = useRef(false);  // uzun bas-konuş-bırak
   const eklendi = useCallback((k: Konusma) => setKonusma((x) => [...x.slice(-20), k]), []);
-  const asistan = useSesliAsistan(eklendi);
+  const guncellendi = useCallback((metin: string, eylem?: Konusma['eylem']) =>
+    setKonusma((x) => x.map((k, i) => (i === x.length - 1 && k.kim === 'tulpar' ? { ...k, metin, eylem: eylem ?? k.eylem } : k))), []);
+  const asistan = useSesliAsistan(eklendi, guncellendi);
 
   const yenile = useCallback(async () => {
     setYukleniyor(true);
