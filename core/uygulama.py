@@ -1,6 +1,7 @@
 """Android uygulamasının kullandığı uç noktalar: ana ekran, onaylar, görevler, sohbetler, konuşma, ses."""
 import json
 import pathlib
+import subprocess
 import tempfile
 import threading
 import time
@@ -208,6 +209,11 @@ def konus(govde: dict = Body(...)):
         zaman = " ".join(x for x in (p.get("tarih"), p.get("saat")) if x) or p.get("zaman")
         gid = gorev_ekle({"metin": p.get("baslik") or p.get("metin") or metin, "zaman": zaman, "kaynak": "konuşma"})["id"]
         eylem = {"tur": "gorev", "id": gid}
+    elif arac == "ikinci_ekran":
+        islem = "kapat" if str(p.get("durum", "")).lower().startswith("kap") else "ac"
+        sonuc = subprocess.run(["/usr/local/bin/tulpar-ekran", islem], capture_output=True, text=True, timeout=60)
+        eylem = {"tur": "ekran", "id": 0}
+        log(f"ikinci ekran {islem}: {sonuc.returncode}")
     elif arac == "claude_code":
         oid = onay_ekle("claude_gorev", f"İş: {p.get('gorev_tanimi') or metin}"[:200], metin)
         eylem = {"tur": "onay", "id": oid}

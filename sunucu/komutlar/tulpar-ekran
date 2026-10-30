@@ -1,0 +1,27 @@
+#!/bin/sh
+# HP ekranını ikinci monitör yapar (Mac'teki spacedesk/Deskreen yayınını tam ekran gösterir).
+#   tulpar-ekran ac | kapat | durum | adres <url>
+# Açıkken her dakika ekranın küçük bir görüntüsünü alıp parmak izini karşılaştırır (görüntü kaydedilmez);
+# BOSTA_DK dakika boyunca hiç değişmezse kendini kapatır. Kapalıyken hiçbir kaynak kullanmaz.
+BOSTA_DK=${BOSTA_DK:-30}
+AYAR=~/tulpar/veri/ekran.conf
+case "$1" in
+  ac)    sudo systemctl start tulpar-ekran.service tulpar-ekran-izle.service && echo "ikinci ekran açıldı" ;;
+  kapat) sudo systemctl stop tulpar-ekran.service && echo "ikinci ekran kapandı" ;;
+  durum) systemctl is-active tulpar-ekran.service ;;
+  adres) [ -n "$2" ] || { cat "$AYAR" 2>/dev/null; exit 0; }
+         echo "ADRES=$2" > "$AYAR" && echo "adres kaydedildi: $2" ;;
+  izle)
+    export XDG_RUNTIME_DIR=/run/user/$(id -u) WAYLAND_DISPLAY=wayland-0
+    sleep 20; son=""; ayni=0
+    while systemctl is-active -q tulpar-ekran.service; do
+      iz=$(grim -s 0.1 -t ppm - 2>/dev/null | md5sum | cut -c1-32)
+      if [ -n "$iz" ] && [ "$iz" = "$son" ]; then ayni=$((ayni + 1)); else ayni=0; son=$iz; fi
+      if [ "$ayni" -ge "$BOSTA_DK" ]; then
+        logger -t tulpar "ikinci ekran ${BOSTA_DK} dk degismedi, kapatiliyor"
+        sudo systemctl stop tulpar-ekran.service; exit 0
+      fi
+      sleep 60
+    done ;;
+  *) echo "kullanım: tulpar-ekran ac | kapat | durum | adres <url>"; exit 1 ;;
+esac

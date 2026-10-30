@@ -1,0 +1,8 @@
+[Unit]
+Description=Tulpar ikinci ekran: 30 dk görüntü değişmezse kapat
+BindsTo=tulpar-ekran.service
+After=tulpar-ekran.service
+
+[Service]
+User=KULLANICI
+ExecStart=/usr/local/bin/tulpar-ekran izle

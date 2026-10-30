@@ -1,0 +1,23 @@
+[Unit]
+Description=Tulpar ikinci ekran (tam ekran tarayıcı, HP ekranında)
+Conflicts=getty@tty1.service
+After=systemd-user-sessions.service
+
+[Service]
+User=KULLANICI
+PAMName=login
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+UtmpIdentifier=tty1
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+EnvironmentFile=-/home/KULLANICI/tulpar/veri/ekran.conf
+ExecStart=/bin/sh -c 'exec /usr/bin/cage -s -- /snap/bin/chromium --kiosk --noerrdialogs --no-first-run --ozone-platform=wayland --disable-translate "${ADRES:-http://viewer.spacedesk.net/}"'
+ExecStartPost=/usr/bin/logger -t tulpar "ikinci ekran acildi"
+ExecStopPost=/usr/bin/logger -t tulpar "ikinci ekran kapandi"
+ExecStopPost=+/bin/systemctl start getty@tty1.service
+
+[Install]
+WantedBy=multi-user.target

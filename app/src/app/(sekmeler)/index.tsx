@@ -85,7 +85,7 @@ export default function AnaEkran() {
         {konusma.map((k, i) => (
           <View key={i} style={[s.balon, k.kim === 'ben' ? { alignSelf: 'flex-end', backgroundColor: r.balonBen } : { alignSelf: 'flex-start', backgroundColor: r.kart }]}>
             <Text style={{ color: r.yazi, fontSize: 15 }}>{k.metin}</Text>
-            {k.eylem ? <Text style={{ color: r.ana, fontSize: 12, marginTop: 4 }}>{k.eylem.tur === 'gorev' ? '✓ görevlere eklendi' : '⏳ onayına sunuldu'}</Text> : null}
+            {k.eylem ? <Text style={{ color: r.ana, fontSize: 12, marginTop: 4 }}>{k.eylem.tur === 'gorev' ? '✓ görevlere eklendi' : k.eylem.tur === 'ekran' ? '🖥 ikinci ekran' : '⏳ onayına sunuldu'}</Text> : null}
           </View>
         ))}
 
