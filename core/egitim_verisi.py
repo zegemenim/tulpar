@@ -21,7 +21,19 @@ CIKTI = VERI / "egitim"
 BAGLAM = 15
 BIRLESTIR_SN = 300
 BAGLAM_PENCERE_SN = 12 * 3600
-SADE_CEVAP_ORANI = 0.15  # "tmm", "ok", tek emoji gibi cevapların sadece bu kadarı tutulur
+SADE_CEVAP_ORANI = 0.15
+EN_UZUN_CEVAP = 800       # daha uzunu genelde yapıştırılmış/iletilmiş metin, konuşma dili değil
+AYNI_CEVAP_EN_FAZLA = 10  # "Tamamdır" gibi aynı cevap en fazla bu kadar örnekte
+# metin içinde geçen gerçek adların yerine (gizlilik için) tutarlı sahte adlar; konuşma doğal kalsın
+SAHTE_ADLAR = ["Ahmet", "Ayşe", "Mehmet", "Zeynep", "Emre", "Elif", "Burak", "Selin", "Mert", "Ece", "Can", "Deniz",
+               "Kerem", "Defne", "Onur", "Buse", "Arda", "İrem", "Kaan", "Duru", "Berk", "Ezgi", "Ozan", "Cansu"]
+ILISKI_IPUCU = [  # sahibin o sohbette kullandığı hitaplar -> ilişki
+    ("aile", r"\b(anne|annecim|anneciğim|babacım|baba|teyze|teyzecim|hala|halacım|dayı|amca|enişte|yenge|kuzen)\w*"),
+    ("hoca", r"\bhoca(m|cım|lar)\b"),
+    ("resmi", r"\b\w+ (bey|hanım)\b|\bsaygılar(ımla)?\b"),
+    ("abi_abla", r"\b(abi|abim|abla|ablam|abicim|ablacım)\b"),
+    ("arkadas", r"\b(kanka|knk|kanki|kankam|reis|kral|moruk|aga|olm|oğlum)\b"),
+]  # "tmm", "ok", tek emoji gibi cevapların sadece bu kadarı tutulur
 SADE = re.compile(r"^\W*(tmm|tamam|ok|okey|olur|evet|hayır|yok|he|hı|aynen|eyv|eyvallah|sağol|tşk|tesekkurler|teşekkürler)?\W*$", re.I)
 
 def _kart(m):
@@ -69,6 +81,7 @@ def sohbet_ornekleri(mesajlar, kart, grup):
     takma, adlar = {}, {}
     for a in sahip.ADLAR + [sahip.AD]:
         adlar[a] = "[ben]"
+    sahte = iter(SAHTE_ADLAR * 50)
 
     def kim(m):
         if m["benden"]:
@@ -76,8 +89,8 @@ def sohbet_ornekleri(mesajlar, kart, grup):
         anahtar = m["gonderen_adi"] or "?"
         if anahtar not in takma:
             takma[anahtar] = f"Kişi {len(takma) + 1}" if grup else "Karşı taraf"
-            if ilk_ad(anahtar) and len(ilk_ad(anahtar)) > 2:
-                adlar[ilk_ad(anahtar)] = takma[anahtar]
+            if ilk_ad(anahtar) and len(ilk_ad(anahtar)) > 2 and ilk_ad(anahtar).lower() not in adlar:
+                adlar[ilk_ad(anahtar)] = next(sahte)
         return takma[anahtar]
 
     ornekler, i = [], 0
@@ -103,8 +116,16 @@ def sohbet_ornekleri(mesajlar, kart, grup):
     return sonuc
 
 
-def sistem_istemi(kart, grup):
-    iliski = (kart or {}).get("iliski") or "bilinmiyor"
+def iliski_tahmin(mesajlar):
+    """Sahibin bu sohbetteki mesajlarında en çok geçen hitap türü."""
+    benim = " ".join(m["metin"].lower() for m in mesajlar if m["benden"])
+    puan = {ad: len(re.findall(desen, benim)) for ad, desen in ILISKI_IPUCU}
+    en, n = max(puan.items(), key=lambda x: x[1])
+    return en if n >= 2 else "bilinmiyor"
+
+
+def sistem_istemi(kart, grup, tahmin="bilinmiyor"):
+    iliski = (kart or {}).get("iliski") if (kart or {}).get("iliski") not in (None, "bilinmiyor") else tahmin
     hitap = (kart or {}).get("hitap")
     return ("Sen [ben] olarak WhatsApp'ta yazıyorsun; onun gerçek üslubuyla, kısa ve doğal cevap ver. "
             f"Sohbet: {'grup' if grup else 'birebir'}. Karşı tarafla ilişki: {iliski}"
@@ -118,7 +139,7 @@ def main():
     disari = haric()
     kartlar = {r["id"]: dict(r) for r in b.execute("SELECT * FROM kisiler")}
     sohbetler = [r[0] for r in b.execute("SELECT DISTINCT sohbet_id FROM mesajlar")]
-    tum, istat = [], Counter()
+    tum, istat, tekrar = [], Counter(), Counter()
     for sid in sohbetler:
         if sid in disari:
             istat["haric_sohbet"] += 1
@@ -128,14 +149,23 @@ def main():
         if not mesajlar:
             continue
         grup = bool(mesajlar[0]["grup"])
+        tahmin = "grup" if grup else iliski_tahmin(mesajlar)
         for o in sohbet_ornekleri(mesajlar, kartlar.get(sid), grup):
+            metin = "\n".join(o["cevap"])
+            if len(metin) > EN_UZUN_CEVAP or not re.sub(r"\[(link|eposta|iban|telefon|sayı|kart|gizli)\]|\W", "", metin):
+                istat["atilan_uzun_veya_bos"] += 1
+                continue
+            tekrar[metin] += 1
+            if tekrar[metin] > AYNI_CEVAP_EN_FAZLA:
+                istat["atilan_tekrar"] += 1
+                continue
             sade = all(SADE.match(c) for c in o["cevap"])
             if sade and random.random() > SADE_CEVAP_ORANI:
                 istat["atilan_sade"] += 1
                 continue
             istat["grup" if grup else "birebir"] += 1
             tum.append({"messages": [
-                {"role": "system", "content": sistem_istemi(kartlar.get(sid), grup)},
+                {"role": "system", "content": sistem_istemi(kartlar.get(sid), grup, tahmin)},
                 {"role": "user", "content": o["baglam"]},
                 {"role": "assistant", "content": "\n".join(o["cevap"])},
             ]})
