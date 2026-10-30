@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS mesajlar (
 CREATE INDEX IF NOT EXISTS mesaj_sohbet ON mesajlar(sohbet_id, zaman);
 CREATE TABLE IF NOT EXISTS onaylar (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  tur TEXT,                      -- claude_gorev | takvim | uyari
+  tur TEXT,                      -- claude_gorev | takvim | uyari | taslak_teklif
   baslik TEXT, aciklama TEXT,
   sohbet_id TEXT, sohbet_adi TEXT, mesaj_id TEXT,
   veri TEXT,                     -- tarih/saat vb. (JSON)

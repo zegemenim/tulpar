@@ -2,6 +2,7 @@
 import json
 import pathlib
 import tempfile
+import threading
 import time
 
 from fastapi import APIRouter, Body, HTTPException, Request
@@ -17,8 +18,8 @@ router = APIRouter()
 _baglam = {}  # kuyruk ve istemler tulpar.py'den bağlanır
 
 
-def bagla(kuyruk, istem, bugun):
-    _baglam.update(kuyruk=kuyruk, istem=istem, bugun=bugun)
+def bagla(kuyruk, istem, bugun, taslak_hazirla):
+    _baglam.update(kuyruk=kuyruk, istem=istem, bugun=bugun, taslak_hazirla=taslak_hazirla)
 
 
 # ---------- onaylar: modelin önerdiği, sahibinin izniyle yapılacak işler ----------
@@ -91,6 +92,11 @@ def onay_karar(oid: int, govde: dict = Body(...)):
         log(f"Claude gorevi onaylandi #{oid} (Claude Code kopru henuz yok, gorev listesine eklendi)")
         db.yaz("INSERT INTO gorevler (metin,zaman,kaynak,olusturma) VALUES (?,?,?,?)",
                o["baslik"].removeprefix("İş isteği: "), None, f"onay #{oid}", time.time())
+    if karar == "onay" and o["tur"] == "taslak_teklif":
+        mesaj = db.oku("SELECT * FROM mesajlar WHERE id=?", o["mesaj_id"])
+        if mesaj:
+            threading.Thread(target=_baglam["taslak_hazirla"], args=(mesaj[0],), daemon=True).start()
+            log(f"taslak isteniyor (onay #{oid}): {o['sohbet_adi']}")
     log(f"onay #{oid} {durum}")
     return {"tamam": True}
 

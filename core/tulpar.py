@@ -60,7 +60,7 @@ def sohbet_modu(sohbet_id):
 
 
 app.include_router(uygulama.router, dependencies=[Depends(yetki)])
-uygulama.bagla(kuyruk, ISTEM, bugun)
+uygulama.bagla(kuyruk, ISTEM, bugun, lambda m: taslak.hazirla(kuyruk, m["sohbet_id"], m.get("sohbet_adi"), [m]))
 
 
 def ele(m):
@@ -73,7 +73,20 @@ def ele(m):
     baglam = "\n".join(f"{sahip.AD if x['benden'] else x.get('gonderen_adi') or '?'}: {x['metin'][:200]}" for x in onceki)
     istem = (f"Kaynak: {kaynak}\n" + (f"Önceki mesajlar (sadece bağlam, değerlendirme):\n{baglam}\n" if baglam else "")
              + f"Değerlendirilecek mesaj: {m['metin']}")
-    sonuc = kuyruk.ekle(Is("eleme", sistem, istem)).bekle() or {}
+    is_ = kuyruk.ekle(Is("eleme", sistem, istem))
+    is_.bekle()
+    if is_.hata or not isinstance(is_.sonuc, dict) or "onem" not in is_.sonuc:
+        # model ulaşılamadı veya bozuk cevap: karar kaydetme, mesaj yeniden denenmek üzere elenmemiş kalır
+        log(f"eleme ertelendi ({is_.hata or 'gecersiz cevap'}): {kaynak[:40]}")
+        with _kilit:
+            _sohbet[m["sohbet_id"]]["eleme"] -= 1
+        if not m.get("_deneme"):  # bir kez 2 dk sonra tekrar dene; olmazsa servis açılışında yeniden alınır
+            m["_deneme"] = True
+            with _kilit:
+                _sohbet[m["sohbet_id"]]["eleme"] += 1
+            threading.Timer(120, ele, args=(m,)).start()
+        return
+    sonuc = is_.sonuc
     sonuc = kurallar.uygula(sonuc, m["metin"], bool(m.get("grup")))
     db.eleme_kaydet(m["id"], sonuc)
     try:
@@ -87,10 +100,13 @@ def ele(m):
     istiyor = sonuc.get("aksiyon") == "cevap_taslagi" or (
         sonuc.get("tur") == "soru" and not m.get("grup") and sonuc.get("aksiyon") != "yok")
     bana = m.get("grup") and (sonuc.get("kime") == "sahip" or "(sahibin mesajına cevap)" in m["metin"])
-    if bana and sohbet_modu(m["sohbet_id"]) == "onemli" and sonuc.get("onem") != "yuksek":
-        sonuc["onem"] = "yuksek"  # ÖNEMLİ grupta doğrudan sahibe yazılan: taslak yok ama haber verilir
+    if bana and sohbet_modu(m["sohbet_id"]) == "onemli" and not sonuc.get("guvenlik"):
+        # ÖNEMLİ grupta doğrudan sahibe yazılan: haber ver ve "taslak hazırlayayım mı?" diye sor
+        sonuc["onem"] = "yuksek"
         db.eleme_kaydet(m["id"], sonuc)
         log(f"BILDIRIM: {kaynak[:40]}: sana yazildi: {m['metin'][:80]}")
+        uygulama.onay_ekle("taslak_teklif", f"{m.get('gonderen_adi') or '?'} sana yazdı ({m.get('sohbet_adi')}): taslak hazırlayayım mı?",
+                           m["metin"][:300], m)
     taslak_gerek = istiyor and sohbet_modu(m["sohbet_id"]) == "tam"  # taslak sadece TAM modda
     with _kilit:
         d = _sohbet.setdefault(m["sohbet_id"], {"son": 0, "eleme": 0, "gelenler": [], "zamanlayici": False})
@@ -137,6 +153,7 @@ def yarim_kalanlari_al():
                    time.time() - 86400)
     for m in kalan:
         m["grup"] = bool(m["grup"])
+        m.pop("eleme", None)
         with _kilit:
             d = _sohbet.setdefault(m["sohbet_id"], {"son": 0, "eleme": 0, "gelenler": [], "zamanlayici": False})
             d["eleme"] += 1
@@ -149,6 +166,9 @@ def yarim_kalanlari_al():
 def baslangic():
     # eski geçmiş mesajları (bu işaret eklenmeden önce alınanlar) yeniden elenmesin
     db.yaz("UPDATE mesajlar SET eleme=? WHERE eleme IS NULL AND zaman<?", json.dumps({"gecmis": True}), 1793386800)
+    # model hatası yüzünden boş kalan kararlar (onem yok) yeniden elensin
+    db.yaz("UPDATE mesajlar SET eleme=NULL WHERE eleme NOT LIKE '%onem%' AND eleme NOT LIKE '%gecmis%' AND zaman>?",
+           time.time() - 86400)
     threading.Thread(target=yarim_kalanlari_al, daemon=True).start()
 
 
