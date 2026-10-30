@@ -21,3 +21,4 @@ eval/sonuc-*.json
 models/
 *.gguf
 dist/
+.DS_Store
