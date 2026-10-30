@@ -1,5 +1,5 @@
 // Sesli konuşma: kaydet -> HP'de Whisper ile yazıya dök -> Tulpar'a sor -> cevabı sesli oku.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
 import * as Speech from 'expo-speech';
 import * as Haptics from 'expo-haptics';
@@ -10,7 +10,9 @@ export type Konusma = { kim: 'ben' | 'tulpar'; metin: string; eylem?: { tur: str
 
 export function useSesliAsistan(eklendi: (k: Konusma) => void) {
   const kayit = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const [durum, setDurum] = useState<Durum>('bos');
+  const [durum, setDurumState] = useState<Durum>('bos');
+  const durumRef = useRef<Durum>('bos');  // basılı tut-bırak'ta güncel durumu görmek için
+  const setDurum = useCallback((d: Durum) => { durumRef.current = d; setDurumState(d); }, []);
   const [hata, setHata] = useState<string | null>(null);
 
   useEffect(() => {
@@ -33,7 +35,7 @@ export function useSesliAsistan(eklendi: (k: Konusma) => void) {
       setHata(e.message);
       setDurum('bos');
     }
-  }, [eklendi]);
+  }, [eklendi, setDurum]);
 
   const basla = useCallback(async () => {
     setHata(null);
@@ -44,10 +46,10 @@ export function useSesliAsistan(eklendi: (k: Konusma) => void) {
     kayit.record();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setDurum('dinliyor');
-  }, [kayit]);
+  }, [kayit, setDurum]);
 
   const bitir = useCallback(async () => {
-    if (durum !== 'dinliyor') return;
+    if (durumRef.current !== 'dinliyor') return;
     await kayit.stop();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (!kayit.uri) return setDurum('bos');
@@ -63,7 +65,7 @@ export function useSesliAsistan(eklendi: (k: Konusma) => void) {
       setHata(e.message);
       setDurum('bos');
     }
-  }, [durum, kayit, sor]);
+  }, [kayit, sor, setDurum]);
 
   return { durum, hata, basla, bitir, sor, sustur: () => { Speech.stop(); setDurum('bos'); } };
 }

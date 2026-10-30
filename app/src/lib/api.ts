@@ -68,7 +68,7 @@ export type Taslak = {
   gelenler?: { id: string; gonderen_adi: string; metin: string; zaman: number }[];
 };
 export type Onay = {
-  id: number; tur: 'claude_gorev' | 'takvim' | 'uyari'; baslik: string; aciklama: string;
+  id: number; tur: 'claude_gorev' | 'takvim' | 'uyari' | 'taslak_teklif'; baslik: string; aciklama: string;
   sohbet_adi: string | null; durum: string; olusturma: number; karar: number | null; veri: Record<string, any>;
 };
 export type Gorev = { id: number; metin: string; zaman: string | null; durum: string; kaynak: string; olusturma: number };
