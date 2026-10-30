@@ -3,7 +3,7 @@
 - Hariç tutulan sohbetler hiç alınmaz; medya indirilmez ([fotoğraf] gibi yer tutucular bağlamda kalır).
 - Art arda yazılan mesajlar (5 dk içinde) tek cevap sayılır: model birden çok kısa mesaj atmayı da öğrenir.
 - Bağlam: cevaptan önceki en fazla 15 mesaj (son 12 saat). Kimseye cevap olmayan mesajlar alınmaz.
-- Maskeleme: telefon, e-posta, link, IBAN, uzun sayılar; kişi adları sohbet içinde tutarlı takma adlara çevrilir.
+- Maskeleme: şifre/kod ifadeleri, kredi kartı (Luhn), CVV, telefon, e-posta, link, IBAN, uzun sayılar; kişi adları sohbet içinde tutarlı takma adlara çevrilir.
 - Çıktı: ~/tulpar/veri/egitim/{egitim,dogrulama}.jsonl (chat formatı) + istatistik.
 Kullanım: python3 egitim_verisi.py
 """
@@ -24,12 +24,23 @@ BAGLAM_PENCERE_SN = 12 * 3600
 SADE_CEVAP_ORANI = 0.15  # "tmm", "ok", tek emoji gibi cevapların sadece bu kadarı tutulur
 SADE = re.compile(r"^\W*(tmm|tamam|ok|okey|olur|evet|hayır|yok|he|hı|aynen|eyv|eyvallah|sağol|tşk|tesekkurler|teşekkürler)?\W*$", re.I)
 
+def _kart(m):
+    """13-19 haneli sayı Luhn kontrolünden geçiyorsa kredi kartı say."""
+    rakam = [int(c) for c in re.sub(r"\D", "", m.group(0))]
+    toplam = sum((d * 2 - 9 if d > 4 else d * 2) if i % 2 == len(rakam) % 2 else d for i, d in enumerate(rakam))
+    return ("[kart] " if m.group(0).endswith(" ") else "[kart]") if 13 <= len(rakam) <= 19 and toplam % 10 == 0 else m.group(0)
+
+
 MASKELER = [
+    # "şifre: x", "parola x", "pw: x", "kod 123456" gibi: anahtar kelimeden sonraki ifade
+    (re.compile(r"(?i)\b(şifre(?:m|si|n)?|sifre(?:m|si|n)?|parola(?:m|sı)?|password|pass|pw|pin|kod(?:u|um)?|code|otp)\b(\s*[:=]?\s*)\S+"), r"\1\2[gizli]"),
+    (re.compile(r"\bTR\s?\d{2}(?:\s?\d{4}){5}\s?\d{0,2}\b", re.I), "[iban]"),
+    (re.compile(r"\b(?:\d[ -]?){13,19}\b"), _kart),
+    (re.compile(r"(?i)\b(cvv|cvc|skt|son kullanma)\b\s*[:=]?\s*[\d/]+"), r"\1 [gizli]"),
     (re.compile(r"https?://\S+|www\.\S+"), "[link]"),
     (re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.]+\b"), "[eposta]"),
-    (re.compile(r"\bTR\s?\d{2}(?:\s?\d{4}){5}\s?\d{0,2}\b", re.I), "[iban]"),
-    (re.compile(r"(?:\+?90[\s-]?)?\(?0?5\d{2}\)?[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}"), "[telefon]"),
     (re.compile(r"\b\d{6,}\b"), "[sayı]"),
+    (re.compile(r"(?:\+?90[\s-]?)?\(?0?5\d{2}\)?[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}"), "[telefon]"),
 ]
 
 

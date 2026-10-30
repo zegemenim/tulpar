@@ -20,3 +20,4 @@ eval/v2-*.json
 eval/sonuc-*.json
 models/
 *.gguf
+dist/
