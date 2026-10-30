@@ -7,6 +7,8 @@ from kuyruk import log
 
 MODEL_YOL = pathlib.Path.home() / "tulpar/models/whisper"
 _model = None
+IPUCU = ("Türkçe konuşma; arada İngilizce terimler geçebilir: deploy, commit, push, server, model, prompt, "
+         "update, meeting, deadline, feedback, link, story, app, Tulpar.")
 _kilit = threading.Lock()
 
 
@@ -18,7 +20,9 @@ def yaziya_dok(dosya):
             _model = WhisperModel("large-v3-turbo", device="cpu", compute_type="int8", cpu_threads=4,
                                   download_root=str(MODEL_YOL))
         t0 = time.time()
-        parcalar, bilgi = _model.transcribe(str(dosya), language="tr", vad_filter=True)
+        # Türkçe ağırlıklı ama arada İngilizce terim geçen konuşma: dili Türkçe sabitle, ipucuyla İngilizce
+        # kelimeleri olduğu gibi yazmaya yönlendir ("deploy" -> "diplay" olmasın)
+        parcalar, bilgi = _model.transcribe(str(dosya), language="tr", vad_filter=True, initial_prompt=IPUCU)
         metin = " ".join(p.text.strip() for p in parcalar).strip()
     log(f"sesli mesaj yaziya dokuldu: {bilgi.duration:.0f} sn ses, {time.time() - t0:.0f} sn surdu")
     return metin
