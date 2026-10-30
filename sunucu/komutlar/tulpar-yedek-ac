@@ -1,0 +1,3 @@
+#!/bin/sh
+# WhatsApp şifreli yedeğini açar; anahtar gizli istemle sorulur.
+exec ~/tulpar/venv/bin/python ~/tulpar/core/yedek_ac.py
