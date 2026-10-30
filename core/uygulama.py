@@ -248,3 +248,14 @@ def bildirimler(sonra: float = 0):
     taslak = db.oku("SELECT id, sohbet_adi, ozet, olusturma FROM taslaklar WHERE durum='bekliyor' AND olusturma>?", sonra)
     onay = db.oku("SELECT id, baslik, olusturma FROM onaylar WHERE durum='bekliyor' AND olusturma>?", sonra)
     return {"zaman": time.time(), "onemli": yeni, "taslaklar": taslak, "onaylar": onay}
+
+
+# ---------- telefondan terminal ----------
+
+@router.get("/terminal")
+def terminal_bilgi():
+    """Uygulamanın HP terminaline (ttyd, 7681) bağlanması için parola. Sadece Tulpar anahtarıyla verilir."""
+    yol = VERI / "terminal-parola"
+    if not yol.exists():
+        raise HTTPException(503, "terminal servisi kurulu değil")
+    return {"port": 7681, "kullanici": "tulpar", "parola": yol.read_text().strip()}

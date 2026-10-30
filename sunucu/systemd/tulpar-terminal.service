@@ -1,0 +1,14 @@
+[Unit]
+Description=Tulpar telefondan terminal (ttyd + tmux; ayrı parola ile)
+After=network-online.target
+
+[Service]
+User=KULLANICI
+WorkingDirectory=/home/KULLANICI
+# Parola ilk açılışta rastgele üretilir; uygulama onu Tulpar anahtarıyla /terminal uç noktasından alır.
+ExecStartPre=/bin/sh -c '[ -s /home/KULLANICI/tulpar/veri/terminal-parola ] || (umask 077; head -c 24 /dev/urandom | base64 | tr -d "/+=" > /home/KULLANICI/tulpar/veri/terminal-parola)'
+ExecStart=/bin/sh -c 'exec /usr/bin/ttyd -p 7681 -W -c tulpar:$(cat /home/KULLANICI/tulpar/veri/terminal-parola) -t fontSize=14 -t titleFixed=Tulpar /usr/bin/tmux new -A -s tulpar'
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

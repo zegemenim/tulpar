@@ -28,6 +28,13 @@ export async function ayarYaz(a: Ayar) {
 
 let calisanAdres: string | null = null;  // en son cevap veren adres önce denenir
 
+/** Şu an bağlı olunan sunucunun ana makine adı (terminal/ekran gibi başka portlar için). */
+export async function sunucuMakinesi(): Promise<string | null> {
+  const a = await ayarOku();
+  const adres = calisanAdres || a?.adres;
+  return adres ? adres.replace(/^https?:\/\//, '').replace(/[:/].*$/, '') : null;
+}
+
 /** Adresleri sırayla dener: önce en son çalışan, sonra Tailscale, sonra ev ağı. */
 async function getir(a: Ayar, yol: string, init: RequestInit, zamanAsimi: number): Promise<Response> {
   const adresler = [...new Set([calisanAdres, a.adres, a.yedek].filter(Boolean) as string[])];
