@@ -2,7 +2,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { File } from 'expo-file-system';
 
-export type Ayar = { adres: string; anahtar: string };
+export type Ayar = { adres: string; anahtar: string; yedek?: string };  // yedek: ev ağı adresi (Tailscale çalışmazsa)
 
 let onbellek: Ayar | null = null;
 
@@ -10,34 +10,55 @@ export async function ayarOku(): Promise<Ayar | null> {
   if (onbellek) return onbellek;
   const adres = await SecureStore.getItemAsync('adres');
   const anahtar = await SecureStore.getItemAsync('anahtar');
-  onbellek = adres && anahtar ? { adres, anahtar } : null;
+  const yedek = (await SecureStore.getItemAsync('yedek')) || undefined;
+  onbellek = adres && anahtar ? { adres, anahtar, yedek } : null;
   return onbellek;
 }
 
+const temiz = (u?: string) => (u || '').trim().replace(/\/+$/, '');
+
 export async function ayarYaz(a: Ayar) {
-  const adres = a.adres.trim().replace(/\/+$/, '');
+  const adres = temiz(a.adres);
+  const yedek = temiz(a.yedek);
   await SecureStore.setItemAsync('adres', adres);
   await SecureStore.setItemAsync('anahtar', a.anahtar.trim());
-  onbellek = { adres, anahtar: a.anahtar.trim() };
+  await SecureStore.setItemAsync('yedek', yedek);
+  onbellek = { adres, anahtar: a.anahtar.trim(), yedek: yedek || undefined };
+}
+
+let calisanAdres: string | null = null;  // en son cevap veren adres önce denenir
+
+/** Adresleri sırayla dener: önce en son çalışan, sonra Tailscale, sonra ev ağı. */
+async function getir(a: Ayar, yol: string, init: RequestInit, zamanAsimi: number): Promise<Response> {
+  const adresler = [...new Set([calisanAdres, a.adres, a.yedek].filter(Boolean) as string[])];
+  let sonHata: unknown;
+  for (const [i, adres] of adresler.entries()) {
+    const kontrol = new AbortController();
+    // son aday dışındakilere kısa süre: ulaşılamıyorsa hızlıca diğerine geç
+    const z = setTimeout(() => kontrol.abort(), i === adresler.length - 1 ? zamanAsimi : Math.min(zamanAsimi, 6000));
+    try {
+      const y = await fetch(adres + yol, { ...init, signal: kontrol.signal });
+      calisanAdres = adres;
+      return y;
+    } catch (e) {
+      sonHata = e;
+    } finally {
+      clearTimeout(z);
+    }
+  }
+  throw sonHata instanceof Error ? sonHata : new Error('Sunucuya ulaşılamadı');
 }
 
 export async function istek<T = any>(yol: string, govde?: unknown, zamanAsimi = 200000): Promise<T> {
   const a = await ayarOku();
   if (!a) throw new Error('Sunucu ayarı yok');
-  const kontrol = new AbortController();
-  const z = setTimeout(() => kontrol.abort(), zamanAsimi);
-  try {
-    const y = await fetch(a.adres + yol, {
-      method: govde === undefined ? 'GET' : 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-tulpar-anahtar': a.anahtar },
-      body: govde === undefined ? undefined : JSON.stringify(govde),
-      signal: kontrol.signal,
-    });
-    if (!y.ok) throw new Error(`${y.status}: ${(await y.text()).slice(0, 200)}`);
-    return (await y.json()) as T;
-  } finally {
-    clearTimeout(z);
-  }
+  const y = await getir(a, yol, {
+    method: govde === undefined ? 'GET' : 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-tulpar-anahtar': a.anahtar },
+    body: govde === undefined ? undefined : JSON.stringify(govde),
+  }, zamanAsimi);
+  if (!y.ok) throw new Error(`${y.status}: ${(await y.text()).slice(0, 200)}`);
+  return (await y.json()) as T;
 }
 
 /** Ses kaydını sunucuya yollar, yazıya dökülmüş metni döner (ses HP'de işlenip silinir). */
@@ -45,11 +66,11 @@ export async function sesGonder(uri: string): Promise<string> {
   const a = await ayarOku();
   if (!a) throw new Error('Sunucu ayarı yok');
   const veri = await new File(uri).bytes();
-  const y = await fetch(a.adres + '/ses', {
+  const y = await getir(a, '/ses', {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream', 'x-tulpar-anahtar': a.anahtar },
     body: veri,
-  });
+  }, 200000);
   if (!y.ok) throw new Error(`ses ${y.status}`);
   return (await y.json()).metin as string;
 }

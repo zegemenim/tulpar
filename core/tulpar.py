@@ -30,7 +30,8 @@ ISTEM = {k: sahip.doldur(v) for k, v in json.loads((pathlib.Path(__file__).paren
 KOPRU = "http://127.0.0.1:8099"
 TOPLAMA_SN = int(__import__("os").environ.get("TOPLAMA_SN", 90))  # aynı sohbetten art arda gelenleri tek taslakta topla
 GUNLER = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
-IZINLI_AG = [ipaddress.ip_network("127.0.0.0/8"), ipaddress.ip_network("100.64.0.0/10")]
+# HP'nin kendisi, Tailscale ağı ve ev ağı (sahibi onayladı: evde Tailscale yoksa da bağlanılsın; anahtar yine şart)
+IZINLI_AG = [ipaddress.ip_network(a) for a in ("127.0.0.0/8", "100.64.0.0/10", "192.168.1.0/24")]
 
 kuyruk = Kuyruk()
 app = FastAPI(title="Tulpar")

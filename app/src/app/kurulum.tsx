@@ -10,12 +10,13 @@ export default function Kurulum() {
   const r = useRenk();
   const [adres, setAdres] = useState('http://');
   const [anahtar, setAnahtar] = useState('');
+  const [yedek, setYedek] = useState('http://');
   const [deniyor, setDeniyor] = useState(false);
 
   const baglan = async () => {
     setDeniyor(true);
     try {
-      await ayarYaz({ adres, anahtar });
+      await ayarYaz({ adres, anahtar, yedek: yedek === 'http://' ? '' : yedek });
       await istek('/durum', undefined, 15000);
       await bildirimleriBaslat().catch(() => {});
       router.replace('/');
@@ -31,10 +32,12 @@ export default function Kurulum() {
     <View style={[s.kap, { backgroundColor: r.zemin }]}>
       <Text style={[s.bas, { color: r.yazi }]}>Tulpar'a bağlan</Text>
       <Text style={{ color: r.soluk, marginBottom: 16 }}>
-        Telefonda Tailscale açık olmalı. Adres örneği: http://100.x.y.z:8090. Anahtar sunucuda ~/tulpar/veri/anahtar dosyasında.
+        Sunucu adresi: Tailscale adresi (örn. http://100.x.y.z:8090). Evde Tailscale olmadan da bağlanmak için ev ağı adresini de yaz (örn. http://192.168.1.100:8090). Anahtar sunucuda ~/tulpar/veri/anahtar dosyasında.
       </Text>
       <Text style={{ color: r.soluk }}>Sunucu adresi</Text>
       <TextInput value={adres} onChangeText={setAdres} autoCapitalize="none" keyboardType="url" style={girdi} />
+      <Text style={{ color: r.soluk }}>Ev ağı adresi (isteğe bağlı: Tailscale çalışmazsa)</Text>
+      <TextInput value={yedek} onChangeText={setYedek} autoCapitalize="none" keyboardType="url" style={girdi} />
       <Text style={{ color: r.soluk }}>Anahtar</Text>
       <TextInput value={anahtar} onChangeText={setAnahtar} autoCapitalize="none" secureTextEntry style={girdi} />
       <Pressable disabled={deniyor} onPress={baglan} style={[s.buton, { backgroundColor: r.ana, opacity: deniyor ? 0.5 : 1 }]}>
