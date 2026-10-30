@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS taslaklar (
 
 def baglan():
     YOL.parent.mkdir(parents=True, exist_ok=True)
-    b = sqlite3.connect(YOL, check_same_thread=False)
+    b = sqlite3.connect(YOL, check_same_thread=False, timeout=60)
+    b.execute("PRAGMA journal_mode=WAL")  # yazılırken başka süreçler (eğitim verisi, komutlar) okuyabilsin
     b.row_factory = sqlite3.Row
     b.executescript(SEMA)
     return b
