@@ -1,0 +1,14 @@
+[Unit]
+Description=Tulpar ana servisi
+After=network-online.target tulpar-llm@hizli.service
+Wants=tulpar-llm@hizli.service
+
+[Service]
+User=KULLANICI
+WorkingDirectory=/home/KULLANICI/tulpar/core
+ExecStart=/home/KULLANICI/tulpar/venv/bin/uvicorn tulpar:app --host 0.0.0.0 --port 8090
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

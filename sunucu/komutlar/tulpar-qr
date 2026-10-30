@@ -1,0 +1,16 @@
+#!/bin/sh
+# WhatsApp eşleştirme QR'ını gösterir; QR yenilendikçe ekranı günceller, bağlanınca çıkar.
+Q=~/tulpar/veri/wa-qr.txt
+[ -f "$Q" ] || { echo "QR yok: WhatsApp zaten bagli ya da kopru baslamadi (journalctl -t tulpar)"; exit 1; }
+SON=""
+while [ -f "$Q" ]; do
+  YENI=$(cat "$Q" 2>/dev/null)
+  if [ -n "$YENI" ] && [ "$YENI" != "$SON" ]; then
+    clear
+    cd ~/tulpar/wa2 && node -e "require('qrcode-terminal').generate(process.argv[1],{small:true})" "$YENI"
+    echo "Telefon: WhatsApp > Ayarlar > Bagli cihazlar > Cihaz bagla  (QR her ~20 sn yenilenir)"
+    SON="$YENI"
+  fi
+  sleep 2
+done
+echo "WhatsApp baglandi."

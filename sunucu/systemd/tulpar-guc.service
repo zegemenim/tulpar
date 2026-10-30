@@ -1,0 +1,9 @@
+[Unit]
+Description=Tulpar CPU guc siniri (sadece Linux)
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c "echo 15000000 > /sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw; echo 20000000 > /sys/class/powercap/intel-rapl:0/constraint_1_power_limit_uw"
+
+[Install]
+WantedBy=multi-user.target

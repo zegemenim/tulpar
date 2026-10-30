@@ -1,0 +1,16 @@
+[Unit]
+Description=Tulpar model sunucusu (%i)
+After=network.target
+
+[Service]
+User=KULLANICI
+EnvironmentFile=/home/KULLANICI/tulpar/models/%i.env
+ExecStart=/home/KULLANICI/tulpar/llama.cpp/build/bin/llama-server -m ${MODEL} --host 127.0.0.1 --port ${PORT} -t 10 -c ${CTX} --jinja --no-webui $EXTRA
+ExecStartPost=/usr/bin/logger -t tulpar "model servisi basladi: %i"
+ExecStopPost=/usr/bin/logger -t tulpar "model servisi durdu: %i"
+Restart=on-failure
+RestartSec=10
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+[Unit]
+Description=Tulpar WhatsApp koprusu
+After=tulpar.service
+Requires=tulpar.service
+
+[Service]
+User=KULLANICI
+WorkingDirectory=/home/KULLANICI/tulpar/wa2
+ExecStart=/usr/bin/node kopru.mjs
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

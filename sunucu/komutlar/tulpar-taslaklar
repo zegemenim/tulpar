@@ -1,0 +1,2 @@
+#!/bin/sh
+exec python3 ~/tulpar/core/taslak_onay.py
