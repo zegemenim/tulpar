@@ -4,6 +4,7 @@ Sadece HP'nin kendisinden ve Tailscale ağından, anahtarla erişilir."""
 import ipaddress
 import json
 import pathlib
+import re
 import secrets
 import threading
 import time
@@ -108,7 +109,9 @@ def ele(m):
         log(f"BILDIRIM: {kaynak[:40]}: sana yazildi: {m['metin'][:80]}")
         uygulama.onay_ekle("taslak_teklif", f"{m.get('gonderen_adi') or '?'} sana yazdı ({m.get('sohbet_adi')}): taslak hazırlayayım mı?",
                            m["metin"][:300], m)
-    taslak_gerek = istiyor and sohbet_modu(m["sohbet_id"]) == "tam"  # taslak sadece TAM modda
+    # sadece görsel/çıkartma olan mesaja taslak yok: içeriğini göremiyoruz, körlemesine cevap uydurmayalım
+    sadece_medya = bool(re.fullmatch(r"(\(sahibin mesajına cevap\) )?(@\S+ )*\[[^\]]+\]( @\S+)*", m["metin"].strip()))
+    taslak_gerek = istiyor and not sadece_medya and sohbet_modu(m["sohbet_id"]) == "tam"  # taslak sadece TAM modda
     with _kilit:
         d = _sohbet.setdefault(m["sohbet_id"], {"son": 0, "eleme": 0, "gelenler": [], "zamanlayici": False})
         d["eleme"] -= 1
@@ -171,6 +174,7 @@ def baslangic():
     db.yaz("UPDATE mesajlar SET eleme=NULL WHERE eleme NOT LIKE '%onem%' AND eleme NOT LIKE '%gecmis%' AND zaman>?",
            time.time() - 86400)
     threading.Thread(target=yarim_kalanlari_al, daemon=True).start()
+    threading.Thread(target=uygulama.isit, daemon=True).start()
 
 
 @app.post("/mesaj", dependencies=[Depends(yetki)])

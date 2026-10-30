@@ -6,6 +6,7 @@ import db
 import sahip
 from kuyruk import Is
 
+YER_TUTUCU = re.compile(r"\[[^\]]{2,30}\]")  # [fotoğraf], [çıkartma] ...
 SAMIMI = ["kanka", "knk", "kral", "lan", "abi", "moruk", "kardeşim", "kanki", "reis"]
 SAMIMI_YASAK_ILISKI = {"aile", "hoca", "resmi", "is"}
 
@@ -77,7 +78,9 @@ def hazirla(kuyruk, sohbet_id, sohbet_adi, gelenler):
     istem = (f"Kişi kartı: ad={kart.get('ad')}, ilişki={kart['iliski']}, hitap={kart.get('hitap')}, "
              f"sen/siz={kart.get('sen_siz')}, not={kart.get('notlar')}\n"
              f"{sahip.AD} adlı sahibin örnek mesajları:\n" + ("\n".join(f"- {o}" for o in ornek) or "- (henüz yok)") +
-             f"\n\nSon konuşma:\n{konusma}\n\nCevaplanacak mesajlar: {', '.join(m['id'] for m in gelenler)}\n"
+             f"\n\nSon konuşma (bağlam):\n{konusma}\n\n"
+             "CEVAPLANACAK MESAJ(LAR) — SADECE bunlara cevap ver, sohbetteki başka konulara değil:\n"
+             + "\n".join(f"[{m['id']}] {m.get('gonderen_adi') or sohbet_adi}: {m['metin']}" for m in gelenler) + "\n"
              f"Bugün: {time.strftime('%Y-%m-%d %A %H:%M')}")
     gecerli = {m["id"] for m in gecmis}
     for deneme in range(2):
@@ -86,7 +89,9 @@ def hazirla(kuyruk, sohbet_id, sohbet_adi, gelenler):
         for sec in cevap.get("secenekler") or []:
             if not isinstance(sec, dict):
                 continue
-            mesajlar = [m for m in sec.get("mesajlar") or [] if isinstance(m, dict) and m.get("metin")]
+            # "[çıkartma]" gibi yer tutucular gönderilemez; sadece gerçek metinler kalır
+            mesajlar = [m for m in sec.get("mesajlar") or [] if isinstance(m, dict) and m.get("metin")
+                        and not YER_TUTUCU.fullmatch(m["metin"].strip())]
             for m in mesajlar:  # model uydurma id verdiyse alıntıyı kaldır
                 if m.get("yanit_id") not in gecerli:
                     m["yanit_id"] = None

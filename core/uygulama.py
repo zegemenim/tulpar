@@ -1,14 +1,17 @@
 """Android uygulamasının kullandığı uç noktalar: ana ekran, onaylar, görevler, sohbetler, konuşma, ses."""
 import json
 import pathlib
+import re
 import subprocess
 import tempfile
 import threading
 import time
 
 from fastapi import APIRouter, Body, HTTPException, Request
+from fastapi.responses import StreamingResponse
 
 import db
+import llm
 import sahip
 import ses
 from kuyruk import Is, log
@@ -21,6 +24,17 @@ _baglam = {}  # kuyruk ve istemler tulpar.py'den bağlanır
 
 def bagla(kuyruk, istem, bugun, taslak_hazirla):
     _baglam.update(kuyruk=kuyruk, istem=istem, bugun=bugun, taslak_hazirla=taslak_hazirla)
+
+
+def isit():
+    """Servis açılınca sohbet istemini modele bir kez okut: ilk sesli soru da önbellekten hızlı başlasın."""
+    try:
+        sistem = SOHBET_SISTEM.replace("{bugun}", _baglam["bugun"]()).replace("{durum}", _durum_ozeti())
+        for _ in llm.akis("hizli", sistem, "merhaba"):
+            break
+        log("sohbet onbellegi isitildi")
+    except Exception as e:
+        log(f"HATA isitma: {e}")
 
 
 # ---------- onaylar: modelin önerdiği, sahibinin izniyle yapılacak işler ----------
@@ -181,28 +195,35 @@ def sohbet_mod(sid: str, govde: dict = Body(...)):
 
 # ---------- konuşma (yazılı veya sesli) ----------
 
+# Değişmeyen kısım başta, değişenler (durum, saat) sonda: model baştaki kısmı önbellekten tekrar kullanır,
+# her soruda bütün metni baştan okumaz (bu işlemcide okuma saniyede ~12 kelime, asıl gecikme buydu).
 SOHBET_SISTEM = sahip.doldur(
-    "Sen Tulpar'sın (diğer adın Kâhya): {SAHIP_TAM} adlı kişinin (sahibinin) kişisel asistanı. Türkçe, kısa ve samimi konuş. "
-    "Bugün {bugun}. Aşağıda sahibinin güncel durumu var; sorusunu buna göre cevapla, bilmediğini uydurma.\n{durum}"
+    "Sen Tulpar'sın (diğer adın Kâhya): {SAHIP_TAM} adlı kişinin (sahibinin) kişisel asistanı. Türkçe, kısa ve samimi konuş; "
+    "sesli okunacağı için 1-3 cümleyi geçme, liste ve emoji kullanma. Bilmediğini uydurma.\n"
+    "Sahibinin güncel durumu:\n{durum}\nŞu an: {bugun}"
 )
 
 
 def _durum_ozeti():
     a = ana()
-    satir = [f"Bekleyen taslak: {a['taslak_sayisi']}", f"Onay bekleyen: {len(a['onaylar'])}"]
-    satir += [f"- onay: {o['baslik']}" for o in a["onaylar"][:5]]
-    satir += [f"- görev: {g['metin']} ({g['zaman'] or 'zamansız'})" for g in a["gorevler"][:8]]
-    satir += [f"- önemli: {o['sohbet_adi']}: {o['eleme'].get('ozet') or o['metin'][:80]}" for o in a["onemli"][:8]]
+    satir = [f"Bekleyen taslak: {a['taslak_sayisi']}, onay bekleyen: {len(a['onaylar'])}"]
+    satir += [f"- onay: {o['baslik'][:70]}" for o in a["onaylar"][:3]]
+    satir += [f"- görev: {g['metin'][:60]} ({g['zaman'] or 'zamansız'})" for g in a["gorevler"][:5]]
+    satir += [f"- önemli: {o['sohbet_adi']}: {(o['eleme'].get('ozet') or o['metin'])[:70]}" for o in a["onemli"][:4]]
     return "\n".join(satir)
 
 
-@router.post("/konus")
-def konus(govde: dict = Body(...)):
-    metin = (govde.get("metin") or "").strip()
-    if not metin:
-        raise HTTPException(400, "metin boş")
+# Bu kelimeler geçiyorsa bir iş isteniyor olabilir; geçmiyorsa sohbet sayılır ve araç kararı atlanır (hız için)
+ISTEK_IPUCU = re.compile(r"(?i)\b(ekle|kaydet|hatırlat|hatirlat|takvim|randevu|alarm|kur|aç|ac|kapat|başlat|durdur|araştır|arastir|"
+                         r"bul|ara\b|özetle|ozetle|yaz|gönder|gonder|taslak|kod|site|proje|düzelt|duzelt|ekran|görev|gorev)")
+
+
+def _arac_uygula(metin, dogrudan=False):
+    """Önce hangi aracın gerektiğine karar verir ve uygular; cevap için sistem istemini hazırlar.
+    dogrudan: kuyruğu beklemeden modele sor (anlık sesli konuşma için; model paralel istek işleyebiliyor)."""
     k, bugun = _baglam["kuyruk"], _baglam["bugun"]()
-    karar = k.ekle(Is("komut", _baglam["istem"]["system_tool"].replace("{bugun}", bugun), metin)).bekle(180) or {}
+    istem = _baglam["istem"]["system_tool"].replace("{bugun}", bugun)
+    karar = (llm.sor("hizli", istem, metin) if dogrudan else k.ekle(Is("komut", istem, metin)).bekle(180)) or {}
     arac, p = karar.get("arac", "yok"), karar.get("parametreler") or {}
     eylem = None
     if arac in ("takvim_ekle", "hatirlatici"):
@@ -220,9 +241,45 @@ def konus(govde: dict = Body(...)):
     sistem = SOHBET_SISTEM.replace("{bugun}", bugun).replace("{durum}", _durum_ozeti())
     if eylem:
         sistem += f"\nAz önce şunu yaptın: {arac} {json.dumps(p, ensure_ascii=False)}. Bunu kısaca söyle."
-    cevap = k.ekle(Is("komut", sistem, metin, json_cevap=False)).bekle(180) or "Şu an cevap veremedim."
+    return arac, eylem, sistem
+
+
+@router.post("/konus")
+def konus(govde: dict = Body(...)):
+    metin = (govde.get("metin") or "").strip()
+    if not metin:
+        raise HTTPException(400, "metin boş")
+    arac, eylem, sistem = _arac_uygula(metin)
+    cevap = _baglam["kuyruk"].ekle(Is("komut", sistem, metin, json_cevap=False)).bekle(180) or "Şu an cevap veremedim."
     log(f"konusma: {metin[:50]} -> {arac}")
     return {"cevap": cevap.strip(), "eylem": eylem, "arac": arac}
+
+
+@router.post("/konus-akis")
+def konus_akis(govde: dict = Body(...)):
+    """Anlık konuşma: cevap üretildikçe satır satır JSON olarak akar (uygulama hemen göstermeye/okumaya başlar).
+    Cevap kuyruğu beklemeden doğrudan modele gider; model aynı anda birden çok isteği işleyebiliyor."""
+    metin = (govde.get("metin") or "").strip()
+    if not metin:
+        raise HTTPException(400, "metin boş")
+
+    def uret():
+        with _baglam["kuyruk"].canli():
+            if ISTEK_IPUCU.search(metin):  # bir iş isteniyor olabilir: önce araç kararı
+                arac, eylem, sistem = _arac_uygula(metin, dogrudan=True)
+            else:  # sohbet/soru: araç kararını atla, hemen cevaba geç
+                arac, eylem = "yok", None
+                sistem = SOHBET_SISTEM.replace("{bugun}", _baglam["bugun"]()).replace("{durum}", _durum_ozeti())
+            yield json.dumps({"tur": "eylem", "eylem": eylem, "arac": arac}, ensure_ascii=False) + "\n"
+            try:
+                for parca in llm.akis("hizli", sistem, metin):
+                    yield json.dumps({"tur": "parca", "metin": parca}, ensure_ascii=False) + "\n"
+            except Exception as e:
+                yield json.dumps({"tur": "hata", "metin": str(e)}, ensure_ascii=False) + "\n"
+        log(f"konusma (akis): {metin[:50]} -> {arac}")
+        yield json.dumps({"tur": "son"}) + "\n"
+
+    return StreamingResponse(uret(), media_type="application/x-ndjson")
 
 
 @router.post("/ses")

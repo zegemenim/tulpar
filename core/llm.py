@@ -40,8 +40,8 @@ def kapat(model):
     subprocess.run(["sudo", "systemctl", "stop", MODELLER[model][1]], check=False)
 
 
-def sor(model, sistem, kullanici, json_cevap=True, dusunme=None, durdur=None):
-    """Modelden cevap al. dusunme: None | 'low' | 'medium' | 'high' (sadece düşünen modeller).
+def akis(model, sistem, kullanici, json_cevap=False, dusunme=None, durdur=None):
+    """Modelin cevabını üretildikçe parça parça verir (anlık okuma/gösterme için).
     durdur: threading.Event; set edilirse iş kesilir ve Iptal fırlatılır."""
     kw = {"enable_thinking": False}
     if dusunme:
@@ -57,7 +57,6 @@ def sor(model, sistem, kullanici, json_cevap=True, dusunme=None, durdur=None):
     baglanti = http.client.HTTPConnection("127.0.0.1", MODELLER[model][0], timeout=3600)
     baglanti.request("POST", "/v1/chat/completions", json.dumps(govde), {"Content-Type": "application/json"})
     yanit = baglanti.getresponse()
-    parcalar = []
     try:
         for satir in yanit:
             if durdur is not None and durdur.is_set():
@@ -65,11 +64,16 @@ def sor(model, sistem, kullanici, json_cevap=True, dusunme=None, durdur=None):
             satir = satir.strip()
             if not satir.startswith(b"data:") or satir == b"data: [DONE]":
                 continue
-            delta = json.loads(satir[5:])["choices"][0].get("delta", {})
-            parcalar.append(delta.get("content") or "")
+            parca = json.loads(satir[5:])["choices"][0].get("delta", {}).get("content")
+            if parca:
+                yield parca
     finally:
         baglanti.close()
-    metin = "".join(parcalar)
+
+
+def sor(model, sistem, kullanici, json_cevap=True, dusunme=None, durdur=None):
+    """Modelden cevabın tamamını al. dusunme: None | 'low' | 'medium' | 'high' (sadece düşünen modeller)."""
+    metin = "".join(akis(model, sistem, kullanici, json_cevap, dusunme, durdur))
     if not json_cevap:
         return metin
     try:

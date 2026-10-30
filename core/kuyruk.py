@@ -71,6 +71,7 @@ class Kuyruk:
         self.hizli = queue.PriorityQueue()
         self.buyuk = queue.PriorityQueue()
         self.acil_sayisi = 0
+        self.canli_sayisi = 0
         self.kilit = threading.Lock()
         self.acil_var = threading.Event()   # set iken büyük şerit durur
         self.son_buyuk = time.time()
@@ -98,9 +99,25 @@ class Kuyruk:
         is_.sonuc = llm.sor(is_.model, is_.sistem, is_.kullanici, is_.json_cevap, is_.dusunme, durdur)
         log(f"is bitti: {is_.tur} {is_.model} ({time.time() - t0:.0f} sn)")
 
+    def canli(self):
+        """Sahibiyle anlık sesli/yazılı konuşma sürerken arka plan işleri yeni iş almaz (işlemci ona kalsın)."""
+        kuyruk = self
+
+        class _Canli:
+            def __enter__(self):
+                with kuyruk.kilit:
+                    kuyruk.canli_sayisi += 1
+
+            def __exit__(self, *_):
+                with kuyruk.kilit:
+                    kuyruk.canli_sayisi -= 1
+        return _Canli()
+
     def _hizli_isci(self):
         while True:
             is_ = self.hizli.get()
+            while self.canli_sayisi and is_.oncelik != "acil":  # canlı konuşma bitene kadar bekle
+                time.sleep(0.3)
             try:
                 self._calistir(is_)
             except Exception as e:
