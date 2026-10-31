@@ -12,6 +12,7 @@ import urllib.request
 from datetime import datetime
 
 from fastapi import Body, Depends, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse
 
 import db
 import ayarlar
@@ -223,6 +224,18 @@ def baslangic():
            time.time() - 86400)
     threading.Thread(target=yarim_kalanlari_al, daemon=True).start()
     threading.Thread(target=uygulama.isit, daemon=True).start()
+
+
+@app.get("/uygulama/vosk-tr.zip")
+def vosk_modeli(istek: Request):
+    """Uyandırma kelimesi için Türkçe ses modeli (herkese açık bir model; sadece ev ağı/Tailscale'den, anahtarsız:
+    telefondaki arka plan servisi uygulamanın anahtarına erişemiyor)."""
+    if not any(ipaddress.ip_address(istek.client.host) in ag for ag in IZINLI_AG):
+        raise HTTPException(403, "izinsiz ağ")
+    yol = VERI / "uygulama/vosk-tr.zip"
+    if not yol.exists():
+        raise HTTPException(404, "model henüz sunucuda yok")
+    return FileResponse(yol, media_type="application/zip")
 
 
 @app.post("/mesaj", dependencies=[Depends(yetki)])

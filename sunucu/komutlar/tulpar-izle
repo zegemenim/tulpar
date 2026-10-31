@@ -173,7 +173,8 @@ def ciz(ekr, durum, ust, kaydir):
 def main(ekr):
     curses.curs_set(0)
     curses.use_default_colors()
-    for i, c in enumerate([curses.COLOR_GREEN, curses.COLOR_YELLOW, curses.COLOR_RED, curses.COLOR_CYAN, 8], 1):
+    gri = 8 if curses.COLORS > 8 else curses.COLOR_WHITE  # 8 renkli terminallerde gri yok
+    for i, c in enumerate([curses.COLOR_GREEN, curses.COLOR_YELLOW, curses.COLOR_RED, curses.COLOR_CYAN, gri], 1):
         curses.init_pair(i, c, -1)
     ekr.timeout(1000)
     threading.Thread(target=olay_akisi, daemon=True).start()
