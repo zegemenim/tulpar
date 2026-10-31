@@ -133,6 +133,9 @@ export async function konusAkis(metin: string, olay: (o: AkisOlay) => void, sohb
   }
 }
 
+/** Mikrofona basılınca: HP'de Whisper'ı hemen belleğe aldırır (açılış süresi konuşurken geçsin). Hata önemsiz. */
+export const sesiIsit = () => { istek('/ses/isit', {}, 5000).catch(() => {}); };
+
 /** Ses kaydını sunucuya yollar, yazıya dökülmüş metni döner (ses HP'de işlenip silinir). */
 export async function sesGonder(uri: string): Promise<string> {
   const a = await ayarOku();

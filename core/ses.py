@@ -63,7 +63,7 @@ _son_kullanim = 0.0
 def _bosta_birak():
     global _model
     while True:
-        time.sleep(30)
+        time.sleep(2)
         with _kilit:
             if _model is not None and time.time() - _son_kullanim > ayarlar.al("whisper_bosta_sn"):  # Gemma ile 16 GB'a sığmıyor
                 _model = None
@@ -73,6 +73,23 @@ def _bosta_birak():
 
 
 threading.Thread(target=_bosta_birak, daemon=True).start()
+
+
+def hazirla():
+    """Mikrofona basılınca çağrılır: Whisper'ı arka planda belleğe al ve bellekte tut. Yükleme bitince ve her
+    çağrıda 'bosta' sayacı yeniden başlar (kayıt uzun sürerse uygulama birkaç sn'de bir tekrar çağırır)."""
+    global _son_kullanim
+    _son_kullanim = time.time()
+    if _model is not None:
+        return
+
+    def yukle():
+        global _son_kullanim
+        with _kilit:
+            _yukle()
+            _son_kullanim = time.time()
+        log("whisper mikrofon basilinca yuklendi")
+    threading.Thread(target=yukle, daemon=True).start()
 
 
 def yaziya_dok(dosya):
@@ -85,5 +102,6 @@ def yaziya_dok(dosya):
         _son_kullanim = time.time()
         parcalar, bilgi = _model.transcribe(_coz(dosya), language="tr", vad_filter=True, initial_prompt=kisisel_ipucu())
         metin = " ".join(p.text.strip() for p in parcalar).strip()
+        _son_kullanim = time.time()  # bosta sayacı dökümün BİTTİĞİ andan başlar
     log(f"sesli mesaj yaziya dokuldu: {bilgi.duration:.0f} sn ses, {time.time() - t0:.0f} sn surdu")
     return metin

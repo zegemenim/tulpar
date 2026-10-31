@@ -146,15 +146,17 @@ export function useSesliAsistan(eklendi: (k: Konusma) => void, guncellendi?: (me
     sesliOkumaDurdur();
     const izin = await AudioModule.requestRecordingPermissionsAsync();
     if (!izin.granted) return setHata('Mikrofon izni yok');
+    sesiIsit();  // Whisper konuşurken yüklensin
     await mikrofonuIste();
     await kayit.prepareToRecordAsync();
     kayit.record();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setDurum('dinliyor');
     const baslangic = Date.now();
-    let konustu = false, sonSes = Date.now();
+    let konustu = false, sonSes = Date.now(), tik = 0;
     const izle = setInterval(() => {
       if (durumRef.current !== 'dinliyor') return clearInterval(izle);
+      if (++tik % 24 === 0) sesiIsit();  // ~6 sn'de bir: uzun konuşmada Whisper bellekten atılmasın
       const db = kayit.getStatus().metering ?? -160;
       if (db > SESSIZ_DB) { konustu = true; sonSes = Date.now(); }
       if (konustu && Date.now() - sonSes > SON_SESSIZLIK_MS) { clearInterval(izle); bitirRef.current(); }
@@ -206,12 +208,14 @@ export function useSesleYaz(metinGeldi: (metin: string) => void) {
     if (durumRef.current === 'bos') {
       const izin = await AudioModule.requestRecordingPermissionsAsync();
       if (!izin.granted) return setHata('Mikrofon izni yok');
+      sesiIsit();  // Whisper konuşurken yüklensin
       await mikrofonuIste();
       await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
       await kayit.prepareToRecordAsync();
       kayit.record();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       ayarla('dinliyor');
+      const tut = setInterval(() => { if (durumRef.current === 'dinliyor') sesiIsit(); else clearInterval(tut); }, 6000);
     } else if (durumRef.current === 'dinliyor') {
       await kayit.stop();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

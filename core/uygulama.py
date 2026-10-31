@@ -410,6 +410,13 @@ def konus_akis(govde: dict = Body(...)):
     return StreamingResponse(uret(), media_type="application/x-ndjson")
 
 
+@router.post("/ses/isit")
+def ses_isit():
+    """Uygulama mikrofona basınca çağırır: Whisper'ı konuşma bitmeden belleğe al (açılış süresi beklenmesin)."""
+    ses.hazirla()
+    return {"tamam": True}
+
+
 @router.post("/ses")
 async def ses_yaziya(istek: Request):
     """Uygulamadan gelen ses kaydı (m4a/ogg/wav) -> metin. Kayıt yazıya dökülünce silinir."""
