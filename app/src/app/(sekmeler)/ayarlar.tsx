@@ -5,6 +5,7 @@ import { router, useFocusEffect } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import OnayKart from '../../bilesenler/OnayKart';
 import { denetle, indirVeKur, mevcutSurum } from '../../lib/guncelleme';
+import { startActivityAsync } from 'expo-intent-launcher';
 import { ayarOku, istek, Onay } from '../../lib/api';
 import { useRenk } from '../../lib/tema';
 
@@ -13,6 +14,7 @@ export default function Ayarlar() {
   const [adres, setAdres] = useState('');
   const [dinle, setDinle] = useState(true);
   const [sorudaDinle, setSorudaDinle] = useState(true);
+  const [uyandirma, setUyandirma] = useState(false);
   const [red, setRed] = useState<Onay[]>([]);
   const [durum, setDurum] = useState<string>('');
 
@@ -20,6 +22,7 @@ export default function Ayarlar() {
     setAdres((await ayarOku())?.adres ?? '');
     setDinle((await SecureStore.getItemAsync('acilista_dinle')) !== 'hayir');
     setSorudaDinle((await SecureStore.getItemAsync('soruda_dinle')) !== 'hayir');
+    setUyandirma((await SecureStore.getItemAsync('uyandirma')) === 'evet');
     try {
       setRed(await istek<Onay[]>('/onaylar?durum=reddedildi'));
       const d = await istek<any>('/durum', undefined, 10000);
@@ -42,6 +45,11 @@ export default function Ayarlar() {
         </Pressable>
       </View>
 
+      <Pressable onPress={() => router.push('/hakkimda')} style={kart}>
+        <Text style={[s.bas, { color: r.yazi }]}>Hakkımda</Text>
+        <Text style={{ color: r.soluk }}>Tulpar'ın senin hakkında bildikleri. Görüp düzeltebilir, ekleyebilirsin.</Text>
+      </Pressable>
+
       <View style={kart}>
         <Text style={[s.bas, { color: r.yazi }]}>Uygulama sürümü: {mevcutSurum()}</Text>
         <Pressable onPress={async () => {
@@ -61,6 +69,22 @@ export default function Ayarlar() {
           <Text style={{ color: r.soluk }}>Güç tuşuna basılı tutunca (veya sesle) açılınca hemen dinler. Uygulamayı kendin açınca dinlemez.</Text>
         </View>
         <Switch value={dinle} onValueChange={(v) => { setDinle(v); SecureStore.setItemAsync('acilista_dinle', v ? 'evet' : 'hayir'); }} />
+      </View>
+
+      <View style={[kart, s.satir]}>
+        <View style={{ flex: 1 }}>
+          <Text style={[s.bas, { color: r.yazi }]}>“Tulpar” / “Kâhya” deyince aç</Text>
+          <Text style={{ color: r.soluk }}>
+            Telefon çevrimdışı olarak sadece bu kelimeleri dinler, ses hiçbir yere gönderilmez. Bildirimde “Tulpar dinliyor” görünür; pil biraz daha harcanır. İlk açılışta Türkçe ses modeli (37 MB) iner ve “diğer uygulamaların üzerinde göster” izni istenir.
+          </Text>
+        </View>
+        <Switch value={uyandirma} onValueChange={async (v) => {
+          setUyandirma(v);
+          await SecureStore.setItemAsync('uyandirma', v ? 'evet' : 'hayir');
+          await startActivityAsync('android.intent.action.MAIN', {
+            packageName: 'dev.tulpar.app', className: 'dev.tulpar.app.UyandirmaActivity', extra: { islem: v ? 'ac' : 'kapat' },
+          }).catch((e: any) => Alert.alert('Açılamadı', e.message));
+        }} />
       </View>
 
       <View style={[kart, s.satir]}>

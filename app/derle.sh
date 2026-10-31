@@ -7,8 +7,10 @@ export JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@17} ANDROID_HOME=${ANDRO
 SURUM=$(node -e "const f='app.json',d=require('./'+f);d.expo.android.versionCode=(d.expo.android.versionCode||1)+1;require('fs').writeFileSync(f,JSON.stringify(d,null,2)+'\n');console.log(d.expo.android.versionCode)")
 echo "sürüm $SURUM derleniyor"
 npx expo prebuild --platform android --no-install >/dev/null
-grep -q "^org.gradle.workers.max" android/gradle.properties || printf "\norg.gradle.workers.max=3\n" >> android/gradle.properties
-(cd android && nice -n 15 ./gradlew assembleRelease --no-daemon -q)
+for a in org.gradle.workers.max=3 org.gradle.caching=true org.gradle.parallel=false; do
+  grep -q "^${a%%=*}=" android/gradle.properties || printf "\n%s\n" "$a" >> android/gradle.properties
+done
+(cd android && nice -n 15 ./gradlew assembleRelease -q; ./gradlew --stop >/dev/null 2>&1)  # bitince belleği bırak
 APK=android/app/build/outputs/apk/release/app-release.apk
 mkdir -p ../dist && cp "$APK" ../dist/Tulpar.apk
 printf '{"surum": %s, "tarih": "%s", "notlar": %s}\n' "$SURUM" "$(date +%Y-%m-%d)" "$(node -e 'console.log(JSON.stringify(process.argv[1]||""))' "$1")" > /tmp/surum.json
