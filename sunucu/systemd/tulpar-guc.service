@@ -1,9 +1,12 @@
 [Unit]
 Description=Tulpar CPU guc siniri: 25 W surekli / 35 W kisa sureli (varsayilan 15 W; kullanici ekstra sogutma ekledi)
+After=thermald.service
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c "echo 25000000 > /sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw; echo 35000000 > /sys/class/powercap/intel-rapl:0/constraint_1_power_limit_uw"
+# thermald acilista sinirlari kendi degerine ceviriyor (200 W): ondan sonra uygula
+ExecStart=/bin/sh -c "sleep 30; echo 25000000 > /sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw; echo 35000000 > /sys/class/powercap/intel-rapl:0/constraint_1_power_limit_uw"
+RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
