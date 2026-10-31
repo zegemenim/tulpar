@@ -136,7 +136,11 @@ class UyandirmaServisi : Service(), RecognitionListener {
         ana.post { bildirim("Türkçe ses modeli hazırlanıyor (37 MB, bir kez)…") }
         // önce uygulamanın HP'den indirdiği kopya (files/vosk-tr.zip), yoksa internetten
         val yerel = File(filesDir, "vosk-tr.zip")
-        zipAc(if (yerel.exists()) yerel.inputStream() else URL("${MODEL_URL}").openStream())
+        try {
+          zipAc(if (yerel.exists()) yerel.inputStream() else URL("${MODEL_URL}").openStream())
+        } catch (e: Exception) {  // bozuk/yarım zip: silinir ki bir sonraki denemede baştan inebilsin
+          yerel.delete(); klasor.deleteRecursively(); throw e
+        }
         yerel.delete()
       }
       model = Model(klasor.absolutePath)
@@ -144,7 +148,10 @@ class UyandirmaServisi : Service(), RecognitionListener {
         val spk = File(filesDir, "vosk-model-spk-0.4")
         if (!spk.exists() || spk.list()?.isEmpty() != false) {
           val yerelSpk = File(filesDir, "vosk-spk.zip")
-          if (yerelSpk.exists()) { zipAc(yerelSpk.inputStream()); yerelSpk.delete() }
+          if (yerelSpk.exists()) {
+            try { zipAc(yerelSpk.inputStream()) } catch (e: Exception) { yerelSpk.delete(); spk.deleteRecursively(); throw e }
+            yerelSpk.delete()
+          }
         }
         if (spk.exists()) spkModel = SpeakerModel(spk.absolutePath)
       } catch (e: Exception) { Log.e("Tulpar", "konusmaci modeli", e) }

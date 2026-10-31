@@ -40,7 +40,7 @@ export async function sesModeliniIndir(): Promise<void> {
   const indir = async (kurulu: string[], zip: string, yol: string) => {
     if (new File(Paths.document, ...kurulu).exists) return;  // zaten kurulu
     const hedef = new File(Paths.document, zip);
-    if (hedef.exists) return;
+    if (hedef.exists) hedef.delete();  // yarım kalmış olabilir (zlib hatası): her seferinde baştan indir
     await File.downloadFileAsync(`http://${makine}:${port}${yol}`, hedef, { headers: { 'x-tulpar-anahtar': a.anahtar }, idempotent: true });
   };
   await indir(['vosk-model-small-tr-0.3', 'conf'], 'vosk-tr.zip', '/uygulama/vosk');
