@@ -224,6 +224,7 @@ def baslangic():
            time.time() - 86400)
     threading.Thread(target=yarim_kalanlari_al, daemon=True).start()
     threading.Thread(target=uygulama.isit, daemon=True).start()
+    threading.Thread(target=uygulama.arastirma_toparla, daemon=True).start()
 
 
 @app.get("/uygulama/vosk-tr.zip")

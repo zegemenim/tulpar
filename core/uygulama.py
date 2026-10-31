@@ -261,6 +261,21 @@ def _arastir(soru, sid):
     log(f"arastirma bitti #{sid}: {soru[:50]}")
 
 
+def arastirma_toparla():
+    """Servis yeniden başlayınca yarım kalan araştırmaları (başlatıldı ama sonucu yazılmadı) soruyla yeniden başlatır."""
+    for satir in db.oku("""SELECT DISTINCT sohbet_id FROM asistan_mesaj WHERE eylem LIKE '%"arastirma"%' AND zaman>?""", time.time() - 6 * 3600):
+        sid = satir["sohbet_id"]
+        bekleyen = db.oku("""SELECT m.id, m.zaman FROM asistan_mesaj m WHERE m.sohbet_id=? AND m.eylem LIKE '%"arastirma"%'
+                             AND NOT EXISTS (SELECT 1 FROM asistan_mesaj r WHERE r.sohbet_id=m.sohbet_id AND r.zaman>m.zaman
+                                             AND r.eylem LIKE '%arastirma_sonuc%') ORDER BY m.id DESC LIMIT 1""", sid)
+        if not bekleyen:
+            continue
+        soru = db.oku("SELECT metin FROM asistan_mesaj WHERE sohbet_id=? AND rol='ben' AND id<? ORDER BY id DESC LIMIT 1", sid, bekleyen[0]["id"])
+        if soru:
+            log(f"yarim kalan arastirma yeniden baslatildi #{sid}")
+            threading.Thread(target=_arastir, args=(soru[0]["metin"].strip(), sid), daemon=True).start()
+
+
 def _arac_uygula(metin, dogrudan=False, gecmis=None, sid=None):
     """Önce hangi aracın gerektiğine karar verir ve uygular; cevap için sistem istemini hazırlar.
     dogrudan: kuyruğu beklemeden modele sor (anlık sesli konuşma için; model paralel istek işleyebiliyor).
