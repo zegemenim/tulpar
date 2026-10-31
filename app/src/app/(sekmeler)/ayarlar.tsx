@@ -91,6 +91,11 @@ export default function Ayarlar() {
         }} />
       </View>
 
+      <Pressable onPress={() => router.push('/sesimi-ogren')} style={kart}>
+        <Text style={[s.bas, { color: r.yazi }]}>Sesimi öğren</Text>
+        <Text style={{ color: r.soluk }}>“Kâhya” ve “Tulpar”ı birkaç kez söyle; telefon seni nasıl duyduğunu öğrenir, uyandırma daha rahat çalışır.</Text>
+      </Pressable>
+
       <View style={[kart, s.satir]}>
         <View style={{ flex: 1 }}>
           <Text style={[s.bas, { color: r.yazi }]}>Soru sorunca cevabımı dinle</Text>

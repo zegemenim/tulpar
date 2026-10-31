@@ -16,6 +16,31 @@ IPUCU = ("Türkçe konuşma; arada İngilizce terimler geçebilir: deploy, commi
 _kilit = threading.Lock()
 
 
+_ipucu_onbellek = (0.0, "")
+
+
+def kisisel_ipucu():
+    """Whisper'a her seferinde verilen ipucu: sahibinin sık yazıştığı kişilerin adları ve hafızadaki özel kelimeler.
+    Böylece 'Kerem', 'Burak', 'Ayşe Hanım' gibi adlar ve karışık İngilizce terimler daha doğru yazılır. 10 dk önbelleklenir."""
+    global _ipucu_onbellek
+    if time.time() - _ipucu_onbellek[0] < 600:
+        return _ipucu_onbellek[1]
+    try:
+        import db
+        adlar = []
+        for r in db.oku("""SELECT gonderen_adi ad, COUNT(*) n FROM mesajlar WHERE benden=0 AND grup=0 AND gonderen_adi IS NOT NULL
+                           GROUP BY gonderen_adi ORDER BY n DESC LIMIT 60"""):
+            ilk = (r["ad"] or "").split()[0] if r["ad"] else ""
+            if ilk.isalpha() and 3 <= len(ilk) <= 14 and ilk not in adlar:
+                adlar.append(ilk)
+        hafiza = [b["bilgi"] for b in db.oku("SELECT bilgi FROM hafiza WHERE guven='kesin' ORDER BY guncel DESC LIMIT 6")]
+        metin = IPUCU + " Kişiler: " + ", ".join(adlar[:30]) + "." + ((" " + " ".join(hafiza)) if hafiza else "")
+    except Exception:
+        metin = IPUCU
+    _ipucu_onbellek = (time.time(), metin[:700])
+    return _ipucu_onbellek[1]
+
+
 def _coz(dosya):
     """Her türlü ses dosyasını (ogg/opus, m4a, wav) ffmpeg ile 16 kHz mono'ya çözer.
     faster-whisper'ın kendi çözücüsü yeni PyAV sürümleriyle uyumsuz olduğu için bunu kullanıyoruz."""
@@ -58,7 +83,7 @@ def yaziya_dok(dosya):
         # kelimeleri olduğu gibi yazmaya yönlendir ("deploy" -> "diplay" olmasın)
         global _son_kullanim
         _son_kullanim = time.time()
-        parcalar, bilgi = _model.transcribe(_coz(dosya), language="tr", vad_filter=True, initial_prompt=IPUCU)
+        parcalar, bilgi = _model.transcribe(_coz(dosya), language="tr", vad_filter=True, initial_prompt=kisisel_ipucu())
         metin = " ".join(p.text.strip() for p in parcalar).strip()
     log(f"sesli mesaj yaziya dokuldu: {bilgi.duration:.0f} sn ses, {time.time() - t0:.0f} sn surdu")
     return metin

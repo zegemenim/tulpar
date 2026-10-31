@@ -37,6 +37,7 @@ export default function Kok() {
         <Stack.Screen name="kurulum" options={{ title: 'Sunucuya bağlan' }} />
         <Stack.Screen name="dinle" options={{ headerShown: false }} />
         <Stack.Screen name="sohbetler" options={{ title: 'Geçmiş sohbetler' }} />
+        <Stack.Screen name="sesimi-ogren" options={{ title: 'Sesimi öğren' }} />
         <Stack.Screen name="hakkimda" options={{ title: 'Hakkımda (Tulpar ne biliyor)' }} />
       </Stack>
     </>

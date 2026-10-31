@@ -103,19 +103,26 @@ class UyandirmaServisi : Service(), RecognitionListener {
 
   private fun durdur() { konusma?.stop(); konusma?.shutdown(); konusma = null }
 
-  private fun kontrol(hipotez: String?) {
+  private fun kontrol(hipotez: String?, son: Boolean) {
     if (hipotez == null || konusma == null) return
     val j = JSONObject(hipotez)
-    val metin = j.optString("partial", j.optString("text", ""))
-    if (!kelime.containsMatchIn(metin)) return
+    val metin = if (son) j.optString("text", "") else j.optString("partial", "")
+    if (ogreniyor) {  // öğrenme: duyulanları topla (uyandırma tetiklenmez)
+      if (son) {
+        metin.split(" ").map { it.trim().lowercase() }.filter { it.length >= 3 }.forEach { ogrenilen.add(it) }
+        ogrenilenDosya.writeText(ogrenilen.joinToString("\n"))
+      }
+      return
+    }
+    if (!eslesir(metin)) return
     durdur()  // mikrofonu uygulamaya bırak
     startActivity(Intent(this, AsistanActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     ana.postDelayed({ dinle() }, 45000)
   }
 
-  override fun onPartialResult(h: String?) = kontrol(h)
-  override fun onResult(h: String?) = kontrol(h)
-  override fun onFinalResult(h: String?) = kontrol(h)
+  override fun onPartialResult(h: String?) = kontrol(h, false)
+  override fun onResult(h: String?) = kontrol(h, true)
+  override fun onFinalResult(h: String?) = kontrol(h, true)
   override fun onError(e: Exception?) { durdur(); ana.postDelayed({ dinle() }, 5000) }
   override fun onTimeout() { durdur(); dinle() }
 
