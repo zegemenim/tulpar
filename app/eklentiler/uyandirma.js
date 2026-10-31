@@ -22,36 +22,89 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
+import org.json.JSONArray
 import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
 import org.vosk.SpeakerModel
-import kotlin.math.sqrt
 import org.vosk.android.RecognitionListener
 import org.vosk.android.SpeechService
 import java.io.File
+import java.io.InputStream
 import java.net.URL
 import java.util.zip.ZipInputStream
+import kotlin.math.sqrt
 
 class UyandirmaServisi : Service(), RecognitionListener {
   private var konusma: SpeechService? = null
   private var model: Model? = null
+  private var spkModel: SpeakerModel? = null
   private val ana = Handler(Looper.getMainLooper())
   private val kelime = Regex("\\\\b(tulpar|tul par|tülpar|kahya|kâhya|kah ya)\\\\b", RegexOption.IGNORE_CASE)
 
+  // "Sesimi öğren" ile öğrenilen kişisel varyantlar ve ses parmak izi
+  private val varyantDosya get() = File(filesDir, "uyandirma_varyant.txt")
+  private val ogrenilenDosya get() = File(filesDir, "uyandirma_ogrenilen.txt")
+  private val sesDosya get() = File(filesDir, "uyandirma_ses.txt")            // ortalama ses vektörü
+  private val yalnizDosya get() = File(filesDir, "uyandirma_yalniz_ben.txt")  // varsa: sadece benim sesimle
+  private var varyantlar: List<String> = emptyList()
+  private var benimSes: DoubleArray? = null
+  private var yalnizBen = false
+  private var ogreniyor = false
+  private val ogrenilen = linkedSetOf<String>()
+  private val ogrenilenSes = mutableListOf<DoubleArray>()
+  private val ESIK = 0.55  // kosinüs uzaklığı bundan küçükse "aynı kişi"
+
   override fun onBind(intent: Intent?): IBinder? = null
 
-  private var modelAdresi: String? = null
+  private fun varyantYukle() {
+    varyantlar = if (varyantDosya.exists()) varyantDosya.readLines().map { it.trim().lowercase() }.filter { it.length >= 3 } else emptyList()
+    val ses = if (sesDosya.exists()) sesDosya.readText().trim().split(",").mapNotNull { it.toDoubleOrNull() } else emptyList()
+    benimSes = if (ses.isNotEmpty()) ses.toDoubleArray() else null
+    yalnizBen = yalnizDosya.exists() && benimSes != null
+  }
+
+  private fun eslesir(metin: String): Boolean {
+    if (kelime.containsMatchIn(metin)) return true
+    val t = " " + metin.lowercase() + " "
+    return varyantlar.any { t.contains(" " + it + " ") }
+  }
+
+  private fun vektor(a: JSONArray): DoubleArray = DoubleArray(a.length()) { a.getDouble(it) }
+
+  private fun uzaklik(a: DoubleArray, b: DoubleArray): Double {
+    var ab = 0.0; var aa = 0.0; var bb = 0.0
+    for (i in a.indices) { ab += a[i] * b[i]; aa += a[i] * a[i]; bb += b[i] * b[i] }
+    return 1.0 - ab / (sqrt(aa) * sqrt(bb) + 1e-9)
+  }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    intent?.getStringExtra("model_url")?.let { modelAdresi = it }
+    when (intent?.getStringExtra("ogren")) {
+      "basla" -> { ogrenilen.clear(); ogrenilenSes.clear(); ogrenilenDosya.writeText(""); ogreniyor = true }
+      "bitir" -> {
+        ogreniyor = false
+        if (ogrenilenSes.size >= 3) {  // ses parmak izi: duyulan cümlelerin ortalaması
+          val n = ogrenilenSes[0].size
+          val ort = DoubleArray(n) { i -> ogrenilenSes.sumOf { it[i] } / ogrenilenSes.size }
+          sesDosya.writeText(ort.joinToString(","))
+        }
+        val eski = if (varyantDosya.exists()) varyantDosya.readLines() else emptyList()
+        varyantDosya.writeText((eski + ogrenilen).map { it.trim().lowercase() }
+          .filter { it.length >= 3 && !kelime.containsMatchIn(it) }.distinct().joinToString("\\n"))
+        varyantYukle()
+      }
+      "yukle" -> varyantYukle()
+      "duraklat" -> { durdur(); ana.postDelayed({ dinle() }, 45000) }  // güç tuşuyla açıldı: mikrofonu uygulamaya bırak
+    }
     return START_STICKY
   }
 
   override fun onCreate() {
     super.onCreate()
     bildirim("Ses modeli hazırlanıyor…")
-    ana.postDelayed({ Thread { hazirla() }.start() }, 500)  // önce model adresi gelsin
+    File(filesDir, "uyandirma_acik").writeText("1")  // yeniden başlatma/güncelleme sonrası hatırlatmak için
+    varyantYukle()
+    Thread { hazirla() }.start()
   }
 
   private fun bildirim(metin: String) {
@@ -64,7 +117,7 @@ class UyandirmaServisi : Service(), RecognitionListener {
     else startForeground(41, n)
   }
 
-  private fun zipAc(kaynak: java.io.InputStream) {
+  private fun zipAc(kaynak: InputStream) {
     ZipInputStream(kaynak).use { zip ->
       var g = zip.nextEntry
       while (g != null) {
@@ -104,6 +157,7 @@ class UyandirmaServisi : Service(), RecognitionListener {
 
   private fun dinle() {
     val m = model ?: return
+    if (konusma != null) return
     try {
       val tanima = spkModel?.let { Recognizer(m, 16000f, it) } ?: Recognizer(m, 16000f)
       konusma = SpeechService(tanima, 16000f).also { it.startListening(this) }
@@ -123,7 +177,7 @@ class UyandirmaServisi : Service(), RecognitionListener {
     if (ogreniyor) {  // öğrenme: duyulanları topla (uyandırma tetiklenmez)
       if (son) {
         metin.split(" ").map { it.trim().lowercase() }.filter { it.length >= 3 }.forEach { ogrenilen.add(it) }
-        ogrenilenDosya.writeText(ogrenilen.joinToString("\n"))
+        ogrenilenDosya.writeText(ogrenilen.joinToString("\\n"))
         val spk = j.optJSONArray("spk")
         if (spk != null && j.optInt("spk_frames", 0) >= 20 && metin.isNotBlank()) ogrenilenSes.add(vektor(spk))
       }
@@ -167,9 +221,12 @@ class UyandirmaActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     val servis = Intent(this, UyandirmaServisi::class.java)
-    intent.getStringExtra("model_url")?.let { servis.putExtra("model_url", it) }
-    if (intent.getStringExtra("islem") == "kapat") {
+    val islem = intent.getStringExtra("islem")
+    if (islem == "kapat") {
+      java.io.File(filesDir, "uyandirma_acik").delete()
       stopService(servis)
+    } else if (islem == "ogren_basla" || islem == "ogren_bitir" || islem == "yukle") {
+      startForegroundService(servis.putExtra("ogren", islem.removePrefix("ogren_")))
     } else {
       if (!Settings.canDrawOverlays(this)) {
         startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + packageName)))

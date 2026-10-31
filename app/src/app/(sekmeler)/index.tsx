@@ -8,6 +8,7 @@ import GuncellemeSeridi from '../../bilesenler/GuncellemeSeridi';
 import OnayKart from '../../bilesenler/OnayKart';
 import { Ana, AsistanMesaj, istek, saat } from '../../lib/api';
 import { yokla } from '../../lib/bildirim';
+import { dinlemeBekliyorMu, dinlemeyeAbone } from '../../lib/dinleIstegi';
 import { durumYazisi, Konusma, useSesliAsistan } from '../../lib/ses';
 import { useRenk } from '../../lib/tema';
 
@@ -56,10 +57,15 @@ export default function AnaEkran() {
     }).catch(() => {});
   }, [sohbet]);
   const yeniSohbet = () => { asistan.sustur(); setKonusma([]); asistan.setSohbetId(null); };
-  useEffect(() => {
-    if (!dinle) return;
-    SecureStore.getItemAsync('acilista_dinle').then((v) => { if (v !== 'hayir') asistan.basla(); });
-  }, [dinle]);
+  // Güç tuşu / "Kâhya" ile açıldı: bekleyen "dinle" isteği varsa (ekran açılırken veya sonradan gelirse) dinlemeye başla
+  const baslaRef = useRef(asistan.basla);
+  baslaRef.current = asistan.basla;
+  const dinlemeyiDene = useCallback(() => {
+    if (!dinlemeBekliyorMu()) return;
+    SecureStore.getItemAsync('acilista_dinle').then((v) => { if (v !== 'hayir') baslaRef.current(); });
+  }, []);
+  useEffect(() => { dinlemeyiDene(); return dinlemeyeAbone(dinlemeyiDene); }, [dinlemeyiDene]);
+  useFocusEffect(useCallback(() => { dinlemeyiDene(); }, [dinlemeyiDene]));
 
   useEffect(() => { if (konusma.at(-1)?.eylem) yenile(); }, [konusma, yenile]);
 

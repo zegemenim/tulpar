@@ -16,6 +16,10 @@ import android.os.Bundle
 class AsistanActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    // Uyandırma servisi mikrofonu tutuyorsa 45 sn bırakmasını iste (yoksa uygulamanın mikrofonu boş kalır)
+    if (java.io.File(filesDir, "uyandirma_acik").exists()) {
+      startForegroundService(Intent(this, UyandirmaServisi::class.java).putExtra("ogren", "duraklat"))
+    }
     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("tulpar://dinle"), this, MainActivity::class.java)
       .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
     finish()
