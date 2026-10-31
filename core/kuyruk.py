@@ -28,6 +28,9 @@ YONLENDIRME = {
     "ozenli": ("ozenli", "arka"),     # önemli ve acelesiz iş (gpt-oss)
 }
 BUYUK_BOSTA_KAPAT_SN = 15 * 60
+# Telefonun bağlantısı koparsa konuşma üreteci kapanmayıp "canlı" kaydını bırakmayabiliyor; bu kayıt bütün
+# arka plan işlerini sonsuza kadar bekletiyordu. Bundan eski canlı kayıtlar sayılmaz.
+CANLI_EN_FAZLA_SN = 180
 
 SEVIYE_SISTEM = ("Bir işin ne kadar düşünme gerektirdiğine karar ver. low = basit, kısa; medium = birkaç adımlı; "
                  "high = önemli, riskli veya çok adımlı (sözleşme, önemli mail, plan). "
@@ -71,7 +74,7 @@ class Kuyruk:
         self.hizli = queue.PriorityQueue()
         self.buyuk = queue.PriorityQueue()
         self.acil_sayisi = 0
-        self.canli_sayisi = 0
+        self.canli_kayit = {}  # canlı konuşma -> başlangıç zamanı
         self.kilit = threading.Lock()
         self.acil_var = threading.Event()   # set iken büyük şerit durur
         self.son_buyuk = time.time()
@@ -106,17 +109,26 @@ class Kuyruk:
         class _Canli:
             def __enter__(self):
                 with kuyruk.kilit:
-                    kuyruk.canli_sayisi += 1
+                    kuyruk.canli_kayit[id(self)] = time.time()
 
             def __exit__(self, *_):
                 with kuyruk.kilit:
-                    kuyruk.canli_sayisi -= 1
+                    kuyruk.canli_kayit.pop(id(self), None)
         return _Canli()
+
+    def _canli_var(self):
+        sinir = time.time() - CANLI_EN_FAZLA_SN
+        with self.kilit:
+            for k, t in list(self.canli_kayit.items()):
+                if t < sinir:
+                    del self.canli_kayit[k]
+                    log("canli konusma kaydi zaman asimina ugradi (baglanti kopmus olabilir), temizlendi")
+            return bool(self.canli_kayit)
 
     def _hizli_isci(self):
         while True:
             is_ = self.hizli.get()
-            while self.canli_sayisi and is_.oncelik != "acil":  # canlı konuşma bitene kadar bekle
+            while is_.oncelik != "acil" and self._canli_var():  # canlı konuşma bitene kadar bekle
                 time.sleep(0.3)
             try:
                 self._calistir(is_)
