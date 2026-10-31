@@ -298,20 +298,41 @@ def _taslak_yaz(kisi, talimat):
     kisi = (kisi or "").strip()
     if not kisi:
         return {"hata": "kimin için yazılacağı anlaşılmadı"}
-    # aynı adı taşıyan birden çok kişi/sohbet olabilir (iki Burak, ya da grupta yazan Burak): kendisinden en son mesaj geleni seç
-    r = db.oku("""SELECT sohbet_id, sohbet_adi, gonderen_adi, grup FROM mesajlar WHERE benden=0 AND (sohbet_adi LIKE ? OR gonderen_adi LIKE ?)
-                  ORDER BY zaman DESC LIMIT 1""", f"%{kisi}%", f"%{kisi}%")
-    if not r:
-        return {"hata": f"'{kisi}' adlı kişi veya sohbet bulunamadı"}
-    sid, ad = r[0]["sohbet_id"], r[0]["sohbet_adi"]
-    if r[0]["grup"]:
-        ad = f"{ad} (grup), {r[0]['gonderen_adi']}'e cevap"
+    # Kişi adı rehberdeki ad olmayabilir (WhatsApp'ta "@UzayGezgini" görünen kişi sahibin "Burak" dediği kişi olabilir): sohbeti modele seçtir
+    haric = set()
+    try:
+        haric = set(json.loads((VERI / "haric.json").read_text()).get("sohbetler", []))
+    except FileNotFoundError:
+        pass
+    adaylar = []
+    for c in db.oku("""SELECT sohbet_id, sohbet_adi, grup, MAX(zaman) z FROM mesajlar WHERE benden=0 AND zaman>? AND sohbet_id NOT LIKE '%newsletter%'
+                       AND sohbet_id NOT LIKE '%broadcast%' GROUP BY sohbet_id ORDER BY z DESC LIMIT 12""", time.time() - 3 * 86400):
+        if c["sohbet_id"] in haric:
+            continue
+        son = [m for m in db.son_mesajlar(c["sohbet_id"], 12) if not m["benden"]][-3:]
+        adaylar.append((c, son))
+    if not adaylar:
+        return {"hata": "son günlerde cevaplanacak mesaj yok"}
+    liste = "\n".join(f"[{i}] {c['sohbet_adi']} ({'grup' if c['grup'] else 'özel'}) — son mesajlar: "
+                      + " | ".join(f"{m.get('gonderen_adi')}: {m['metin'][:70]}" for m in son) for i, (c, son) in enumerate(adaylar))
+    sistem = ('Sahibi bir kişiye mesaj yazdırmak istiyor. Sohbet adı rehberdeki ad olmayabilir (kişinin WhatsApp adı farklı olabilir). '
+              'Sahibinin sözündeki ipuçlarından (kişinin adı, o kişinin yazdığı mesajların içeriği, özel mi grup mu) hangi sohbetin kastedildiğini seç. '
+              'SADECE JSON: {"secim": sohbet_numarası, "emin": true|false}. Hiçbiri uymuyorsa {"secim": null}. Özel sohbeti, sahibi grup demedikçe tercih et.')
+    k = _baglam["kuyruk"].ekle(Is("komut", sistem, f"Kişi: {kisi}\nSahibinin sözü: {talimat}\n\nSohbetler:\n{liste}")).bekle(180) or {}
+    i = k.get("secim")
+    if not isinstance(i, int) or not 0 <= i < len(adaylar):
+        return {"hata": f"'{kisi}' hangi sohbet anlaşılamadı; sohbetin adını söyler misin?"}
+    c, kayitlar = adaylar[i]
+    sid, ad = c["sohbet_id"], c["sohbet_adi"]
+    kimden = None
+    if c["grup"]:  # grupta: adı geçen kişinin mesajlarına cevap
+        kimden = next((m["gonderen_adi"] for m in reversed(kayitlar) if kisi.lower() in (m.get("gonderen_adi") or "").lower()), None)
+        ad = f"{ad} (grup)"
     try:
         if sid in set(json.loads((VERI / "haric.json").read_text()).get("sohbetler", [])):
             return {"hata": "bu sohbet kapalı, yazamam"}
     except FileNotFoundError:
         pass
-    kimden = r[0]["gonderen_adi"] if r[0]["grup"] else None  # grupta: sadece o kişinin son mesajlarına cevap
     gelen = [m for m in db.son_mesajlar(sid, 40) if not m["benden"] and (not kimden or m["gonderen_adi"] == kimden)][-3:] or db.son_mesajlar(sid, 1)
     for t in db.taslaklar("bekliyor"):
         if t["sohbet_id"] == sid:
