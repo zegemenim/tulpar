@@ -193,6 +193,10 @@ async function baglan() {
       log(`wa olay: ${type} ${jid.split('@')[1] || '?'} ${getContentType(msg.message || {}) || '-'} ${msg.key.fromMe ? 'benden' : 'gelen'} -> ${neden}`);
       try {
         if (!onayli() || haricMi(msg.key.remoteJid || '')) continue;  // içerik hiçbir yere gitmez
+        if (msg.key.fromMe && msg.message?.reactionMessage?.text) {  // sahibin verdiği tepkiler: hangi emojiyi kullandığını öğrenmek için
+          fs.appendFileSync(path.join(VERI, 'tepkiler.jsonl'), JSON.stringify({ emoji: msg.message.reactionMessage.text, hedef: msg.message.reactionMessage.key?.id, zaman: Date.now() / 1000 }) + '\n', { mode: 0o600 });
+          continue;
+        }
         const m = donustur(msg);
         if (m && getContentType(msg.message) === 'audioMessage') {  // sesli mesaj: HP'de yazıya dökülecek
           try {

@@ -134,6 +134,14 @@ export async function konusAkis(metin: string, olay: (o: AkisOlay) => void, sohb
 }
 
 /** Mikrofona basılınca: HP'de Whisper'ı hemen belleğe aldırır (açılış süresi konuşurken geçsin). Hata önemsiz. */
+/** Sunucudaki bir resim için Image kaynağı (adres + anahtar başlığı). */
+export async function resimKaynagi(yol: string): Promise<{ uri: string; headers: Record<string, string> } | null> {
+  const a = await ayarOku();
+  if (!a) return null;
+  const adresler = await adresBul(a);
+  return { uri: adresler[0] + yol, headers: { 'x-tulpar-anahtar': a.anahtar } };
+}
+
 export const sesiIsit = () => { istek('/ses/isit', {}, 5000).catch(() => {}); };
 
 /** Ses kaydını sunucuya yollar, yazıya dökülmüş metni döner (ses HP'de işlenip silinir). */
@@ -156,7 +164,7 @@ export type Mesaj = {
   id: string; sohbet_id: string; sohbet_adi: string; grup: number; gonderen_adi: string; benden: number;
   metin: string; zaman: number; alinti_id?: string | null; alinti?: { gonderen: string; metin: string } | null; eleme?: Eleme | null;
 };
-export type TaslakMesaj = { yanit_id: string | null; metin: string };
+export type TaslakMesaj = { yanit_id: string | null; metin: string; tepki?: string | null; cikartma?: string | null };
 export type Secenek = { etiket: string; mesajlar: TaslakMesaj[] };
 export type Taslak = {
   id: number; sohbet_id: string; sohbet_adi: string; ozet: string | null; mesaj_idler: string[];

@@ -1,9 +1,15 @@
 // Bir taslak: hangi mesajlara cevap, özet, uyarılar ve seçenekler. Gönderim her zaman ayrıca onay ister.
-import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import SesliGirdi from './SesliGirdi';
-import { istek, saat, Taslak, TaslakMesaj } from '../lib/api';
+import { istek, resimKaynagi, saat, Taslak, TaslakMesaj } from '../lib/api';
 import { useRenk } from '../lib/tema';
+
+function Cikartma({ sha }: { sha: string }) {
+  const [kaynak, setKaynak] = useState<{ uri: string; headers: Record<string, string> } | null>(null);
+  useEffect(() => { resimKaynagi(`/cikartma/${sha}`).then(setKaynak).catch(() => {}); }, [sha]);
+  return kaynak ? <Image source={kaynak} style={{ width: 120, height: 120 }} resizeMode="contain" /> : <Text>🖼</Text>;
+}
 
 export default function TaslakKart({ t, bitti }: { t: Taslak; bitti: () => void }) {
   const r = useRenk();
@@ -101,7 +107,8 @@ export default function TaslakKart({ t, bitti }: { t: Taslak; bitti: () => void 
                 <Text style={{ color: r.soluk, fontSize: 12 }} numberOfLines={2}>{a.metin}</Text>
               </View>
             ) : null}
-            <Text style={{ color: r.yazi, fontSize: 15 }}>{m.metin}</Text>
+            {m.cikartma ? <Cikartma sha={m.cikartma} />
+              : <Text style={{ color: r.yazi, fontSize: m.tepki ? 34 : 15 }}>{m.metin}</Text>}
           </View>
         );
       })}

@@ -106,6 +106,30 @@ def grup_ele(sohbet_id):
     ele(temsilci, toplu=mesajlar)
 
 
+_emoji_onbellek = {"zaman": 0, "metin": ""}
+EMOJI = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF\u2764\u2B50]\uFE0F?")
+
+
+def sahip_emojileri():
+    """Sahibin mesajlarında ve verdiği tepkilerde en sık kullandığı emojiler (tepki seçimi için; 1 saat önbellek)."""
+    if time.time() - _emoji_onbellek["zaman"] < 3600:
+        return _emoji_onbellek["metin"]
+    sayac = {}
+    for r in db.oku("SELECT metin FROM mesajlar WHERE benden=1 ORDER BY zaman DESC LIMIT 20000"):
+        for e in EMOJI.findall(r["metin"]):
+            sayac[e] = sayac.get(e, 0) + 1
+    try:
+        for satir in (VERI / "tepkiler.jsonl").read_text().splitlines():
+            e = json.loads(satir).get("emoji")
+            if e:
+                sayac[e] = sayac.get(e, 0) + 5  # bilinçli verilen tepki daha güçlü işaret
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    ilk = sorted(sayac, key=sayac.get, reverse=True)[:12]
+    _emoji_onbellek.update(zaman=time.time(), metin=" ".join(ilk))
+    return _emoji_onbellek["metin"]
+
+
 def ele(m, toplu=None):
     """Bir mesajı değerlendir; sonucu kaydet ve gerekiyorsa taslak sırasına koy.
     toplu: grupta art arda gelen mesajlar; hepsi tek seferde okunur, sonuç son mesaja (m) yazılır."""
@@ -113,6 +137,8 @@ def ele(m, toplu=None):
     if m.get("grup"):
         kaynak = f"{kaynak} (grup), yazan: {m.get('gonderen_adi')}"
     sistem = ISTEM["system_triage"].replace("{bugun}", bugun())
+    if sahip_emojileri():
+        sistem += f"\nSahibinin en sık kullandığı emojiler (tepki seçerken bunlardan seç): {sahip_emojileri()}"
     yeni = {x["id"] for x in (toplu or [m])}
     n = ayarlar.al("baglam_mesaj")
     onceki = [x for x in db.son_mesajlar(m["sohbet_id"], n + 1 + len(yeni)) if x["id"] not in yeni][-n:]
