@@ -44,6 +44,13 @@ CREATE TABLE IF NOT EXISTS gorevler (
   durum TEXT DEFAULT 'acik',     -- acik | bitti
   kaynak TEXT, olusturma REAL
 );
+CREATE TABLE IF NOT EXISTS hafiza (            -- sahibi hakkında kalıcı bilgiler (her konuşmada bilinir, model değişse de kalır)
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  bilgi TEXT,                                   -- örn. "Annesinin doğum günü 12 Mart"
+  kaynak TEXT,                                  -- sohbet #id | elle
+  guven TEXT DEFAULT 'tahmin',                  -- kesin (sahibi yazdı/onayladı) | tahmin (Tulpar çıkardı)
+  olusturma REAL, guncel REAL
+);
 CREATE TABLE IF NOT EXISTS asistan_sohbet (   -- sahibinin Tulpar'la sohbetleri (Claude/Gemini sohbetleri gibi)
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   baslik TEXT, ozet TEXT,                       -- ozet: uzun sohbette eski kısmın özeti

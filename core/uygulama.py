@@ -29,7 +29,7 @@ def bagla(kuyruk, istem, bugun, taslak_hazirla):
 def isit():
     """Servis açılınca sohbet istemini modele bir kez okut: ilk sesli soru da önbellekten hızlı başlasın."""
     try:
-        sistem = SOHBET_SISTEM.replace("{bugun}", _baglam["bugun"]()).replace("{durum}", _durum_ozeti())
+        sistem = _sistem(_baglam["bugun"]())
         for _ in llm.akis("hizli", sistem, "merhaba"):
             break
         log("sohbet onbellegi isitildi")
@@ -200,8 +200,16 @@ def sohbet_mod(sid: str, govde: dict = Body(...)):
 SOHBET_SISTEM = sahip.doldur(
     "Sen Tulpar'sın (diğer adın Kâhya): {SAHIP_TAM} adlı kişinin (sahibinin) kişisel asistanı. Türkçe, kısa ve samimi konuş; "
     "sesli okunacağı için 1-3 cümleyi geçme, liste ve emoji kullanma. Bilmediğini uydurma.\n"
+    "Sahibi hakkında bildiklerin:\n{hafiza}\n"
     "Sahibinin güncel durumu:\n{durum}\nŞu an: {bugun}"
 )
+
+
+def _sistem(bugun):
+    """Sohbet istemi: hafıza nadiren değiştiği için durumdan önce (önbellek dostu)."""
+    bilgiler = db.oku("SELECT bilgi FROM hafiza ORDER BY (guven='kesin') DESC, guncel DESC LIMIT 40")
+    return (SOHBET_SISTEM.replace("{hafiza}", "\n".join(f"- {b['bilgi']}" for b in bilgiler) or "- (henüz yok)")
+            .replace("{bugun}", bugun).replace("{durum}", _durum_ozeti()))
 
 
 def _durum_ozeti():
@@ -261,7 +269,7 @@ def _arac_uygula(metin, dogrudan=False, gecmis=None):
         ek = f"\nİşi yapmak için eksik bilgi var. Sahibine SADECE şunu sor: {p['soru']}"
     elif arac == "onay_iste" and p.get("ozet"):
         ek = f"\nBilgiler tamam. Sahibine kısaca özetleyip onay iste: {p['ozet']}"
-    sistem = SOHBET_SISTEM.replace("{bugun}", bugun).replace("{durum}", _durum_ozeti())
+    sistem = _sistem(bugun)
     if eylem:
         ek = f"\nAz önce şunu yaptın: {arac} {json.dumps(p, ensure_ascii=False)}. Bunu kısaca söyle."
     return arac, eylem, sistem + ek
@@ -351,7 +359,7 @@ def konus_akis(govde: dict = Body(...)):
             if devam or ISTEK_IPUCU.search(metin):  # bir iş isteniyor veya süren iş: önce araç kararı
                 arac, eylem, sistem = _arac_uygula(metin, dogrudan=True, gecmis=gecmis[-8:])
             else:  # sohbet/soru: araç kararını atla, hemen cevaba geç
-                sistem = SOHBET_SISTEM.replace("{bugun}", _baglam["bugun"]()).replace("{durum}", _durum_ozeti())
+                sistem = _sistem(_baglam["bugun"]())
             yield json.dumps({"tur": "eylem", "eylem": eylem, "arac": arac}, ensure_ascii=False) + "\n"
             try:
                 for parca in llm.akis("hizli", sistem, metin, gecmis=gecmis):
@@ -364,6 +372,7 @@ def konus_akis(govde: dict = Body(...)):
                tum, json.dumps(eylem) if eylem else None, time.time())
         db.yaz("UPDATE asistan_sohbet SET guncel=? WHERE id=?", time.time(), sid)
         threading.Thread(target=_ozetle_gerekirse, args=(sid,), daemon=True).start()
+        threading.Thread(target=_hafizaya_yaz, args=(sid, metin, tum), daemon=True).start()
         log(f"konusma (akis) #{sid}: {metin[:50]} -> {arac}")
         yield json.dumps({"tur": "son", "soru": tum.endswith("?")}) + "\n"
 
@@ -428,3 +437,56 @@ def uygulama_apk():
     if not yol.exists():
         raise HTTPException(404, "güncelleme yok")
     return FileResponse(yol, media_type="application/vnd.android.package-archive", filename="Tulpar.apk")
+
+
+
+# ---------- kalıcı hafıza ("hakkımda") ----------
+
+HAFIZA_SISTEM = sahip.doldur(
+    "Sahibi ({SAHIP}) ile asistanı arasındaki son konuşmadan, sahibi hakkında KALICI ve işe yarar bilgileri çıkar: "
+    "kim olduğu, ailesi ve yakınları, okulu/işi, alışkanlıkları, sevdikleri/sevmedikleri, önemli tarihler, tercihleri. "
+    "Geçici şeyleri (bugünkü ruh hali, tek seferlik istek) ve zaten bilinenleri ALMA. Emin değilsen alma. "
+    'SADECE JSON: {"bilgiler": ["kısa, tek cümlelik bilgi"]} (yoksa boş liste)'
+)
+
+
+def _hafizaya_yaz(sid, ben, tulpar):
+    """Konuşmanın son turundan kalıcı bilgi çıkarır (arka plan işi, sahibini bekletmez)."""
+    if len(ben) < 12:
+        return
+    bilinen = "\n".join(f"- {b['bilgi']}" for b in db.oku("SELECT bilgi FROM hafiza ORDER BY guncel DESC LIMIT 60"))
+    try:
+        cevap = _baglam["kuyruk"].ekle(Is("ozet", HAFIZA_SISTEM,
+                                          f"Zaten bilinenler:\n{bilinen or '- yok'}\n\nSahibi: {ben}\nAsistan: {tulpar}")).bekle(900) or {}
+    except Exception:
+        return
+    simdi = time.time()
+    for b in (cevap.get("bilgiler") or [])[:3]:
+        b = str(b).strip()
+        if 8 <= len(b) <= 200 and not db.oku("SELECT id FROM hafiza WHERE lower(bilgi)=lower(?)", b):
+            db.yaz("INSERT INTO hafiza (bilgi, kaynak, olusturma, guncel) VALUES (?,?,?,?)", b, f"sohbet #{sid}", simdi, simdi)
+            log(f"hafizaya eklendi: {b[:60]}")
+
+
+@router.get("/hafiza")
+def hafiza_listesi():
+    return db.oku("SELECT * FROM hafiza ORDER BY guncel DESC")
+
+
+@router.post("/hafiza")
+def hafiza_ekle(govde: dict = Body(...)):
+    """Sahibi elle ekler ya da düzeltir (id verilirse günceller). Elle girilen bilgi 'kesin' sayılır."""
+    bilgi = (govde.get("bilgi") or "").strip()
+    if not bilgi:
+        raise HTTPException(400, "bilgi boş")
+    if govde.get("id"):
+        db.yaz("UPDATE hafiza SET bilgi=?, guven='kesin', guncel=? WHERE id=?", bilgi, time.time(), govde["id"])
+        return {"id": govde["id"]}
+    return {"id": db.yaz("INSERT INTO hafiza (bilgi, kaynak, guven, olusturma, guncel) VALUES (?,?,?,?,?)",
+                         bilgi, "elle", "kesin", time.time(), time.time())}
+
+
+@router.post("/hafiza/{hid}/sil")
+def hafiza_sil(hid: int):
+    db.yaz("DELETE FROM hafiza WHERE id=?", hid)
+    return {"tamam": True}
