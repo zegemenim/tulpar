@@ -92,7 +92,12 @@ export function useSesliAsistan(eklendi: (k: Konusma) => void, guncellendi?: (me
       if (!sesliCevap) return;
       const kalan = tum.slice(okunan);
       // tamamlanmış cümleleri oku; sonda kalan yarım cümleyi bekle (cevap bitince hepsi okunur)
-      const m = son ? kalan.length : Math.max(kalan.lastIndexOf('. '), kalan.lastIndexOf('? '), kalan.lastIndexOf('! '), kalan.lastIndexOf('\n')) + 1;
+      let m = son ? kalan.length : Math.max(kalan.lastIndexOf('. '), kalan.lastIndexOf('? '), kalan.lastIndexOf('! '), kalan.lastIndexOf('\n')) + 1;
+      // Henüz hiçbir şey okunmadıysa ve cümle uzuyorsa ilk parçayı virgülde böl: ses daha erken başlasın
+      if (m <= 0 && okunan === 0 && !son) {
+        const v = kalan.lastIndexOf(', ');
+        if (v >= 25) m = v + 1;
+      }
       if (m <= 0) return;
       const cumle = kalan.slice(0, m).trim();
       okunan += m;
