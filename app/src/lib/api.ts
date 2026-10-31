@@ -36,20 +36,36 @@ export async function sunucuMakinesi(): Promise<string | null> {
   return adres ? adres.replace(/^https?:\/\//, '').replace(/[:/].*$/, '') : null;
 }
 
-/** Adresleri sırayla dener: önce en son çalışan, sonra Tailscale, sonra ev ağı. */
-async function getir(a: Ayar, yol: string, init: RequestInit, zamanAsimi: number, getirici: (u: string, i: any) => Promise<any> = fetch): Promise<Response> {
-  const adresler = [...new Set([calisanAdres, a.adres, a.yedek].filter(Boolean) as string[])];
-  let sonHata: unknown;
-  for (const [i, adres] of adresler.entries()) {
+/** Hangi adres çalışıyor? Hızlı yoklama (/durum, kısa süre) ile bulur; asıl istek bundan sonra o adrese uzun süreyle gider.
+ *  (Eskiden asıl isteğe kısa süre koyuyorduk: ses yazıya dökme gibi yavaş işler iptal edilip tekrarlanıyordu.) */
+async function adresBul(a: Ayar): Promise<string[]> {
+  const adaylar = [...new Set([calisanAdres, a.adres, a.yedek].filter(Boolean) as string[])];
+  if (calisanAdres) return adaylar;  // en son çalışan önce; olmazsa getir() sıradakine geçer
+  for (const adres of adaylar) {
     const kontrol = new AbortController();
-    // son aday dışındakilere kısa süre: ulaşılamıyorsa hızlıca diğerine geç
-    const z = setTimeout(() => kontrol.abort(), i === adresler.length - 1 ? zamanAsimi : Math.min(zamanAsimi, 8000));
+    const z = setTimeout(() => kontrol.abort(), 5000);
+    try {
+      const y = await fetch(adres + '/durum', { headers: { 'x-tulpar-anahtar': a.anahtar }, signal: kontrol.signal });
+      if (y.status < 500) { calisanAdres = adres; return [adres, ...adaylar.filter((x) => x !== adres)]; }
+    } catch {} finally { clearTimeout(z); }
+  }
+  return adaylar;
+}
+
+async function getir(a: Ayar, yol: string, init: RequestInit, zamanAsimi: number, getirici: (u: string, i: any) => Promise<any> = fetch): Promise<Response> {
+  const adresler = await adresBul(a);
+  let sonHata: unknown;
+  for (const adres of adresler) {
+    const kontrol = new AbortController();
+    const z = setTimeout(() => kontrol.abort(), zamanAsimi);
     try {
       const y = await getirici(adres + yol, { ...init, signal: kontrol.signal });
       calisanAdres = adres;
       return y;
     } catch (e) {
       sonHata = e;
+      if (adres === calisanAdres) calisanAdres = null;  // çalışmıyor: bir dahaki sefere yeniden yokla
+      if (kontrol.signal.aborted) break;  // uzun süre cevap gelmedi: aynı isteği başka adrese tekrar gönderme
     } finally {
       clearTimeout(z);
     }
