@@ -41,7 +41,11 @@ export async function sesModeliniIndir(): Promise<void> {
     if (new File(Paths.document, ...kurulu).exists) return;  // zaten kurulu
     const hedef = new File(Paths.document, zip);
     if (hedef.exists) hedef.delete();  // yarım kalmış olabilir (zlib hatası): her seferinde baştan indir
-    await File.downloadFileAsync(`http://${makine}:${port}${yol}`, hedef, { headers: { 'x-tulpar-anahtar': a.anahtar }, idempotent: true });
+    // Geçici ada iner, bitince taşınır: indirme sürerken servis başlarsa yarım zip'i açmaya çalışmasın
+    const gecici = new File(Paths.document, zip + '.indiriliyor');
+    if (gecici.exists) gecici.delete();
+    await File.downloadFileAsync(`http://${makine}:${port}${yol}`, gecici, { headers: { 'x-tulpar-anahtar': a.anahtar }, idempotent: true });
+    gecici.move(hedef);
   };
   await indir(['vosk-model-small-tr-0.3', 'conf'], 'vosk-tr.zip', '/uygulama/vosk');
   await indir(['vosk-model-spk-0.4'], 'vosk-spk.zip', '/uygulama/vosk-spk').catch(() => {});  // yoksa sadece "benim sesimle" çalışmaz

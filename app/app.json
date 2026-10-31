@@ -25,7 +25,7 @@
         "REQUEST_INSTALL_PACKAGES"
       ],
       "softwareKeyboardLayoutMode": "resize",
-      "versionCode": 11
+      "versionCode": 13
     },
     "web": {
       "favicon": "./assets/favicon.png"
