@@ -1,7 +1,7 @@
 // "Sesimi öğren": uyandırma servisi senin "Kâhya" / "Tulpar" demeni nasıl duyduğunu toplar ve bunları
 // kişisel varyant listesine ekler (Google'ın "Hey Google" ses eğitimi gibi). Hepsi telefonda, çevrimdışı.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { File, Paths } from 'expo-file-system';
 import { startActivityAsync } from 'expo-intent-launcher';
 import { useRenk } from '../lib/tema';
@@ -20,9 +20,21 @@ export default function SesimiOgren() {
   const [calisiyor, setCalisiyor] = useState(false);
   const [duyulan, setDuyulan] = useState<string[]>([]);
   const [varyant, setVaryant] = useState<string[]>([]);
+  const [sesVar, setSesVar] = useState(false);
+  const [yalnizBen, setYalnizBen] = useState(false);
   const zamanlayici = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const yukle = useCallback(async () => setVaryant(await oku('uyandirma_varyant.txt')), []);
+  const yukle = useCallback(async () => {
+    setVaryant(await oku('uyandirma_varyant.txt'));
+    setSesVar(new File(Paths.document, 'uyandirma_ses.txt').exists);
+    setYalnizBen(new File(Paths.document, 'uyandirma_yalniz_ben.txt').exists);
+  }, []);
+  const yalnizDegistir = async (v: boolean) => {
+    const f = new File(Paths.document, 'uyandirma_yalniz_ben.txt');
+    if (v) { if (!f.exists) f.create(); await f.write('1'); } else if (f.exists) f.delete();
+    await gonder('yukle');
+    setYalnizBen(v);
+  };
   useEffect(() => { yukle(); return () => { if (zamanlayici.current) clearInterval(zamanlayici.current); }; }, [yukle]);
 
   const basla = async () => {
@@ -71,6 +83,17 @@ export default function SesimiOgren() {
           <Text style={{ color: r.ana, marginTop: 6 }}>{duyulan.length ? `Duydukları: ${duyulan.join(', ')}` : '(henüz bir şey duymadı)'}</Text>
         </View>
       )}
+
+      <View style={[kart, { flexDirection: 'row', alignItems: 'center', gap: 10 }]}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: r.yazi, fontWeight: '700' }}>Sadece benim sesimle uyan</Text>
+          <Text style={{ color: r.soluk, fontSize: 13 }}>
+            {sesVar ? 'Ses parmak izin kayıtlı. Başkası “Kâhya” derse uyanmaz (Siri gibi). Cümle bitince doğruladığı için uyanma yarım saniye gecikir.'
+              : 'Önce yukarıdan Başla/Bitir ile kendi sesini kaydet.'}
+          </Text>
+        </View>
+        <Switch value={yalnizBen} disabled={!sesVar} onValueChange={yalnizDegistir} />
+      </View>
 
       <View style={kart}>
         <Text style={{ color: r.yazi, fontWeight: '700', marginBottom: 6 }}>Öğrenilen varyantlar</Text>

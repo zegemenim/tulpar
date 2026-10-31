@@ -31,15 +31,18 @@ export async function indirVeKur(): Promise<void> {
 }
 
 
-/** Uyandırma için Türkçe ses modelini (37 MB) HP'den indirir; uyandırma servisi açılınca bunu kullanır. */
+/** Uyandırma için ses modellerini (Türkçe 37 MB + konuşmacı 13 MB) HP'den indirir; servis açılınca bunları kullanır. */
 export async function sesModeliniIndir(): Promise<void> {
   const a = await ayarOku();
   const makine = await sunucuMakinesi();
   if (!a || !makine) throw new Error('Sunucu ayarı yok');
-  if (new File(Paths.document, 'vosk-model-small-tr-0.3', 'conf').exists) return;  // zaten kurulu
-  const hedef = new File(Paths.document, 'vosk-tr.zip');
-  if (hedef.exists) return;
   const port = a.adres.match(/:(\d+)/)?.[1] ?? '8090';
-  await File.downloadFileAsync(`http://${makine}:${port}/uygulama/vosk`, hedef,
-    { headers: { 'x-tulpar-anahtar': a.anahtar }, idempotent: true });
+  const indir = async (kurulu: string[], zip: string, yol: string) => {
+    if (new File(Paths.document, ...kurulu).exists) return;  // zaten kurulu
+    const hedef = new File(Paths.document, zip);
+    if (hedef.exists) return;
+    await File.downloadFileAsync(`http://${makine}:${port}${yol}`, hedef, { headers: { 'x-tulpar-anahtar': a.anahtar }, idempotent: true });
+  };
+  await indir(['vosk-model-small-tr-0.3', 'conf'], 'vosk-tr.zip', '/uygulama/vosk');
+  await indir(['vosk-model-spk-0.4'], 'vosk-spk.zip', '/uygulama/vosk-spk').catch(() => {});  // yoksa sadece "benim sesimle" çalışmaz
 }

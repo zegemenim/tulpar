@@ -517,3 +517,12 @@ def uygulama_vosk():
     if not yol.exists():
         raise HTTPException(404, "ses modeli HP'de yok")
     return FileResponse(yol, media_type="application/zip", filename="vosk-tr.zip")
+
+
+@router.get("/uygulama/vosk-spk")
+def uygulama_vosk_spk():
+    """Konuşmacı (ses parmak izi) modeli: uyandırmayı sadece sahibinin sesine açmak için."""
+    yol = GUNCELLEME / "vosk-spk.zip"
+    if not yol.exists():
+        raise HTTPException(404, "konuşmacı modeli HP'de yok")
+    return FileResponse(yol, media_type="application/zip", filename="vosk-spk.zip")

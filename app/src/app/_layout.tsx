@@ -3,6 +3,8 @@ import { ActivityIndicator, View } from 'react-native';
 import { Stack, router } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
+import * as SecureStore from 'expo-secure-store';
+import { startActivityAsync } from 'expo-intent-launcher';
 import { ayarOku } from '../lib/api';
 import { bildirimleriBaslat } from '../lib/bildirim';
 import { useRenk } from '../lib/tema';
@@ -15,7 +17,17 @@ export default function Kok() {
     ayarOku().then((a) => {
       setHazir(true);
       if (!a) router.replace('/kurulum');
-      else bildirimleriBaslat().catch(() => {});
+      else {
+        bildirimleriBaslat().catch(() => {});
+        // Uyandırma ayarı açıksa servisi (yeniden) başlat: güncelleme/yeniden başlatma sonrası Android onu kapatır
+        SecureStore.getItemAsync('uyandirma').then((v) => {
+          if (v === 'evet') {
+            startActivityAsync('android.intent.action.MAIN', {
+              packageName: 'dev.tulpar.app', className: 'dev.tulpar.app.UyandirmaActivity', extra: { islem: 'ac' },
+            }).catch(() => {});
+          }
+        });
+      }
     });
     // bildirime dokununca ilgili ekrana git
     const abone = Notifications.addNotificationResponseReceivedListener((y) => {
