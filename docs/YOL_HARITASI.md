@@ -46,8 +46,8 @@ Sahibinin istekleri ve kararları. Biten işler işaretlenir; yenileri eklendik�
 ## Kaynak dağıtımı (HP / Raspberry Pi / VDS)
 Karar: model (Gemma) bölünmez (ağ gecikmesi hızı çökertir); yan işler yük dağıtımı için taşınır.
 - [x] **Konuşma sentezi (Piper) → Raspberry Pi**: `sunucu/pi/tulpar-ses.*`, Pi'de `~/tulpar-pi/`, port 8095, anahtarlı. HP `core/tts.py` önce Pi'yi dener, olmazsa yerelde üretir (HP `veri/pi-ses.json` ile bağlanır; HP ağa dönünce yazılacak). Ölçüm: 3,3 sn ses 1,2–2,4 sn'de üretiliyor.
-- [ ] **Yedekleme → Pi SSD (734 GB boş)**: HP `veri/` (tulpar.db, haric.json, sohbet-modlari.json, sahip.json, anahtar) ve model dosyaları günlük `rsync` ile; Pi'deki Immich/Nextcloud verilerine dokunulmaz.
-- [ ] **Model dosyaları deposu → Pi SSD**: GGUF'lar (Q8, Q3_K_XL, birleşmiş Q3_K_M) HP'de yer açmak için Pi'de saklanır.
+- [x] **Yedekleme → Pi SSD (734 GB boş)** (kuruldu: `tulpar-yedekle`, her gece 04:30, Pi'de 14 gün tutulur; HP'nin Pi'deki anahtarı kısıtlı: sadece `~/tulpar-yedek` klasörü, başka komut çalıştıramaz): HP `veri/` (tulpar.db, haric.json, sohbet-modlari.json, sahip.json, anahtar) ve model dosyaları günlük `rsync` ile; Pi'deki Immich/Nextcloud verilerine dokunulmaz.
+- [~] **Model dosyaları deposu → Pi SSD** (kopyalama başladı, 4 MB/sn sınırla; bitince HP'deki Q8 ve Qwen kopyaları doğrulanıp senin onayınla silinecek): GGUF'lar (Q8, Q3_K_XL, birleşmiş Q3_K_M) HP'de yer açmak için Pi'de saklanır.
 - [x] **Web araştırması (tarayıcı) → Raspberry Pi**: `sunucu/pi/tulpar-arastir.*`, port 8096, anahtarlı, sistem Chromium, `MemoryMax=900M` + `OOMScoreAdjust=900` (bellek dolarsa ilk bu kapanır; Immich/Nextcloud etkilenmez). Ölçüm: 2 sayfalık araştırma 35 sn, kullanılabilir RAM en düşük ~1,2 GB. HP `core/tarayici.py` önce Pi'yi dener, olmazsa HP'de yapar (HP `veri/pi-arastir.json` ile bağlanır; HP ağa dönünce yazılacak). VDS kullanılmıyor: iki cihaz yeter.
 - [ ] RAM yükseltmesi: 2×16 GB (eşleşen çift; 24 GB karışık çiftli kanalı bozar). Hız değil kararlılık/önbellek kazandırır.
 - Küçük model (sınıflandırma) Pi/VDS'e kurulmayacak: kural tabanlı eleme (kanal/bülten) aynı işi bedavaya yapıyor.

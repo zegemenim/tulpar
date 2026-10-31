@@ -1,0 +1,16 @@
+#!/bin/sh
+# Günlük yedek: HP verisi -> Raspberry Pi SSD (sadece ~/tulpar-yedek'e yazabilen kısıtlı anahtarla).
+# Dahil: veritabanı (tutarlı anlık kopya), ayar dosyaları, eğitim verisi. Hariç (bilerek): WhatsApp oturumu, anahtarlar, APK'lar.
+set -e
+VERI=$HOME/tulpar/veri
+GUN=$(date +%F)
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+$HOME/tulpar/venv/bin/python - "$VERI/tulpar.db" "$TMP/tulpar.db" <<'PY'
+import sqlite3, sys
+k = sqlite3.connect(sys.argv[1]); h = sqlite3.connect(sys.argv[2]); k.backup(h); h.close(); k.close()
+PY
+for f in haric.json sohbet-modlari.json sahip.json; do [ -f "$VERI/$f" ] && cp "$VERI/$f" "$TMP/"; done
+[ -d "$VERI/egitim" ] && cp -r "$VERI/egitim" "$TMP/egitim"
+rsync -a -e "ssh -i $HOME/.ssh/pi_yedek -o BatchMode=yes" "$TMP/" "zegemenim@192.168.1.2:veri/$GUN/"
+logger -t tulpar-yedek "yedek alindi: $GUN"

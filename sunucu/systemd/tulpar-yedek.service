@@ -1,0 +1,9 @@
+[Unit]
+Description=Tulpar günlük yedek (Raspberry Pi'ye)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=zegemenim
+Nice=19
+ExecStart=/usr/local/bin/tulpar-yedekle
