@@ -31,6 +31,9 @@ TASLAK_SISTEM = sahip.doldur(
     "Cevap sahibinin bildiği bir bilgiye bağlıysa (örn. 'bugün son tarihli ödev var mı?'), her olası cevap için seçenek yaz "
     "('Yok', 'Var: [hangisi]', 'Bilmiyorum'); etiket sahibine soruyu açıkça sorsun. "
     "Bir tarih/saat gibi seçeneklenemeyen bilgi gerekiyorsa [köşeli parantez] içinde boş bırak.\n"
+    "BAĞLAMDA KAL: sadece CEVAPLANACAK MESAJ(LAR)'a cevap ver, konuşmanın konusundan ayrılma. Bağlamda geçmeyen saat, ders, plan, "
+    "isim veya söz UYDURMA; anlamadıysan kısa, nötr bir cevap yaz. Rastgele harf dizisi (klavye ezmesi) sadece örneklerde sahibi öyle "
+    "yazıyorsa ve gülme/şaşırma tepkisinde kullanılır; başka yerde anlamlı cümle kur.\n"
     "Gerekirse birden çok kısa mesaj yaz; her mesajın yanit_id'si cevapladığı gelen mesajın id'si olsun (genel cevapta null).\n"
     'SADECE JSON: {"ozet": "gelenlerin tek cümle özeti", "secenekler": [{"etiket": "kısa karar adı", '
     '"mesajlar": [{"yanit_id": "...", "metin": "..."}]}]}  (karar gerekmiyorsa tek seçenek)'
