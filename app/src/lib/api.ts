@@ -79,16 +79,16 @@ export async function istek<T = any>(yol: string, govde?: unknown, zamanAsimi = 
   return (await y.json()) as T;
 }
 
-export type AkisOlay = { tur: 'basladi' | 'eylem' | 'parca' | 'hata' | 'son'; metin?: string; eylem?: { tur: string; id: number } | null; arac?: string };
+export type AkisOlay = { tur: 'basladi' | 'eylem' | 'parca' | 'hata' | 'son'; metin?: string; sohbet_id?: number; soru?: boolean; eylem?: { tur: string; id: number } | null; arac?: string };
 
 /** Anlık konuşma: cevap üretildikçe her satırı (olayı) geri çağırır. */
-export async function konusAkis(metin: string, olay: (o: AkisOlay) => void): Promise<void> {
+export async function konusAkis(metin: string, olay: (o: AkisOlay) => void, sohbetId?: number | null): Promise<void> {
   const a = await ayarOku();
   if (!a) throw new Error('Sunucu ayarı yok');
   const y = await getir(a, '/konus-akis', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-tulpar-anahtar': a.anahtar },
-    body: JSON.stringify({ metin }),
+    body: JSON.stringify({ metin, sohbet_id: sohbetId ?? null }),
   }, 200000, akisFetch);
   if (!y.ok || !y.body) throw new Error(`konuşma ${y.status}`);
   const okuyucu = y.body.getReader();
@@ -152,3 +152,6 @@ export const saat = (t: number) => {
   return bugun ? d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
     : d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short' });
 };
+
+export type AsistanSohbet = { id: number; baslik: string; guncel: number; son: string | null };
+export type AsistanMesaj = { id: number; rol: 'ben' | 'tulpar'; metin: string; eylem: { tur: string; id: number } | null; zaman: number };

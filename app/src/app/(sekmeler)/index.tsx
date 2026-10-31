@@ -6,7 +6,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Ionicons } from '@expo/vector-icons';
 import GuncellemeSeridi from '../../bilesenler/GuncellemeSeridi';
 import OnayKart from '../../bilesenler/OnayKart';
-import { Ana, istek, saat } from '../../lib/api';
+import { Ana, AsistanMesaj, istek, saat } from '../../lib/api';
 import { yokla } from '../../lib/bildirim';
 import { durumYazisi, Konusma, useSesliAsistan } from '../../lib/ses';
 import { useRenk } from '../../lib/tema';
@@ -20,7 +20,7 @@ export default function AnaEkran() {
   const [yazi, setYazi] = useState('');
   const [yukleniyor, setYukleniyor] = useState(false);
   const basili = useRef(false);  // uzun bas-konuş-bırak
-  const eklendi = useCallback((k: Konusma) => setKonusma((x) => [...x.slice(-20), k]), []);
+  const eklendi = useCallback((k: Konusma) => setKonusma((x) => [...x.slice(-40), k]), []);
   const guncellendi = useCallback((metin: string, eylem?: Konusma['eylem']) =>
     setKonusma((x) => x.map((k, i) => (i === x.length - 1 && k.kim === 'tulpar' ? { ...k, metin, eylem: eylem ?? k.eylem } : k))), []);
   const asistan = useSesliAsistan(eklendi, guncellendi);
@@ -45,7 +45,17 @@ export default function AnaEkran() {
   }, [yenile]));
 
   // Sadece asistan olarak açılınca (güç tuşu / sesle uyandırma: tulpar://dinle) otomatik dinle; elle açınca değil
-  const { dinle } = useLocalSearchParams<{ dinle?: string }>();
+  const { dinle, sohbet } = useLocalSearchParams<{ dinle?: string; sohbet?: string }>();
+
+  // Geçmişten bir sohbet seçildiyse onu yükle ve oradan devam et
+  useEffect(() => {
+    if (!sohbet) return;
+    istek<{ mesajlar: AsistanMesaj[] }>(`/asistan/sohbet/${sohbet}`).then((v) => {
+      setKonusma(v.mesajlar.map((m) => ({ kim: m.rol, metin: m.metin, eylem: m.eylem })));
+      asistan.setSohbetId(Number(sohbet));
+    }).catch(() => {});
+  }, [sohbet]);
+  const yeniSohbet = () => { asistan.sustur(); setKonusma([]); asistan.setSohbetId(null); };
   useEffect(() => {
     if (!dinle) return;
     SecureStore.getItemAsync('acilista_dinle').then((v) => { if (v !== 'hayir') asistan.basla(); });
@@ -85,7 +95,19 @@ export default function AnaEkran() {
         {ana?.onaylar.length ? ana.onaylar.map((o) => <OnayKart key={o.id} o={o} bitti={yenile} />)
           : <Text style={{ color: r.soluk, marginBottom: 8 }}>Onay bekleyen bir şey yok.</Text>}
 
-        {konusma.length > 0 && <Text style={[s.bolum, { color: r.soluk }]}>KONUŞMA</Text>}
+        <View style={s.sohbetSatir}>
+          <Text style={[s.bolum, { color: r.soluk, marginTop: 0, marginBottom: 0, flex: 1 }]}>
+            {asistan.sohbetId ? 'SOHBET (devam ediyor)' : 'YENİ SOHBET'}
+          </Text>
+          <Pressable onPress={() => router.push('/sohbetler')} style={[s.kucukDugme, { borderColor: r.cizgi }]}>
+            <Ionicons name="time-outline" size={16} color={r.ana} /><Text style={{ color: r.ana, fontSize: 13 }}>Geçmiş</Text>
+          </Pressable>
+          {konusma.length > 0 && (
+            <Pressable onPress={yeniSohbet} style={[s.kucukDugme, { borderColor: r.cizgi }]}>
+              <Ionicons name="add" size={16} color={r.ana} /><Text style={{ color: r.ana, fontSize: 13 }}>Yeni</Text>
+            </Pressable>
+          )}
+        </View>
         {konusma.map((k, i) => (
           <View key={i} style={[s.balon, k.kim === 'ben' ? { alignSelf: 'flex-end', backgroundColor: r.balonBen } : { alignSelf: 'flex-start', backgroundColor: r.kart }]}>
             <Text style={{ color: r.yazi, fontSize: 15 }}>{k.metin}</Text>
@@ -129,6 +151,8 @@ const s = StyleSheet.create({
   bolum: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginTop: 10, marginBottom: 6 },
   balon: { borderRadius: 14, padding: 10, marginBottom: 6, maxWidth: '88%' },
   onemli: { borderWidth: 1, borderRadius: 12, padding: 10, marginBottom: 6, gap: 2 },
+  sohbetSatir: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14, marginBottom: 6 },
+  kucukDugme: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 },
   alt: { padding: 12, borderTopWidth: 1 },
   girdiSatir: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   girdi: { flex: 1, borderWidth: 1, borderRadius: 22, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15 },

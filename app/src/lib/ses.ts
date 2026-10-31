@@ -3,18 +3,29 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
 import * as Speech from 'expo-speech';
 import * as Haptics from 'expo-haptics';
+import * as SecureStore from 'expo-secure-store';
 import { konusAkis, sesGonder } from './api';
 
 export type Durum = 'bos' | 'dinliyor' | 'yaziya' | 'dusunuyor' | 'konusuyor';
 export type Konusma = { kim: 'ben' | 'tulpar'; metin: string; eylem?: { tur: string; id: number } | null };
 
 /** eklendi: yeni balon; guncellendi: son Tulpar balonunun metni (akarken) değişti. */
+// Eller serbest dinleme: konuşma bitince (sessizlik) kendiliğinden durur; hiç konuşulmazsa vazgeçer
+const SESSIZ_DB = -42;          // bunun altı sessizlik sayılır
+const SON_SESSIZLIK_MS = 1600;  // konuştuktan sonra bu kadar sessizlik: bitti
+const HIC_KONUSMAZSA_MS = 8000; // açıldıktan sonra bu sürede konuşma başlamazsa kapat
+
 export function useSesliAsistan(eklendi: (k: Konusma) => void, guncellendi?: (metin: string, eylem?: Konusma['eylem']) => void) {
-  const kayit = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const kayit = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
   const [durum, setDurumState] = useState<Durum>('bos');
   const durumRef = useRef<Durum>('bos');  // basılı tut-bırak'ta güncel durumu görmek için
   const setDurum = useCallback((d: Durum) => { durumRef.current = d; setDurumState(d); }, []);
   const [hata, setHata] = useState<string | null>(null);
+  const sohbetRef = useRef<number | null>(null);  // devam eden sohbet: Tulpar önceki mesajları hatırlar
+  const [sohbetId, setSohbetIdState] = useState<number | null>(null);
+  const setSohbetId = useCallback((id: number | null) => { sohbetRef.current = id; setSohbetIdState(id); }, []);
+  const basladiRef = useRef<() => void>(() => {});
+  const bitirRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     AudioModule.requestRecordingPermissionsAsync();
@@ -30,6 +41,7 @@ export function useSesliAsistan(eklendi: (k: Konusma) => void, guncellendi?: (me
     let okunan = 0;  // tum içinde sesli okunmuş kısmın sonu
     let eylem: Konusma['eylem'] = null;
     let konusuyor = false;
+    let soruSordu = false;
     const oku = (son: boolean) => {
       if (!sesliCevap) return;
       const kalan = tum.slice(okunan);
@@ -45,6 +57,8 @@ export function useSesliAsistan(eklendi: (k: Konusma) => void, guncellendi?: (me
     try {
       let ilk = true;
       await konusAkis(metin, (o) => {
+        if (o.tur === 'basladi' && o.sohbet_id) setSohbetId(o.sohbet_id);
+        if (o.tur === 'son') soruSordu = !!o.soru;
         if (o.tur === 'eylem') eylem = o.eylem ?? null;
         if (o.tur === 'parca' && o.metin) {
           tum += o.metin;
@@ -53,20 +67,27 @@ export function useSesliAsistan(eklendi: (k: Konusma) => void, guncellendi?: (me
           oku(false);
         }
         if (o.tur === 'hata') setHata(o.metin ?? 'hata');
-      });
+      }, sohbetRef.current);
       if (ilk) eklendi({ kim: 'tulpar', metin: tum || 'Şu an cevap veremedim.', eylem });
       oku(true);
-      if (!konusuyor) setDurum('bos');
-      else {  // sıradaki cümlelerin okunması bitince "boş"a dön
+      // Sesli konuşmada Tulpar soru sorduysa, okuması bitince mikrofon kendiliğinden açılır (ayarlardan kapatılabilir)
+      const otomatikDinle = sesliCevap && soruSordu && (await SecureStore.getItemAsync('soruda_dinle')) !== 'hayir';
+      if (!konusuyor) {
+        setDurum('bos');
+        if (otomatikDinle) basladiRef.current();
+      } else {  // sıradaki cümlelerin okunması bitince "boş"a dön (veya cevabı dinle)
         const z = setInterval(async () => {
-          if (!(await Speech.isSpeakingAsync())) { clearInterval(z); if (durumRef.current === 'konusuyor') setDurum('bos'); }
-        }, 500);
+          if (!(await Speech.isSpeakingAsync())) {
+            clearInterval(z);
+            if (durumRef.current === 'konusuyor') { setDurum('bos'); if (otomatikDinle) basladiRef.current(); }
+          }
+        }, 400);
       }
     } catch (e: any) {
       setHata(e.message);
       setDurum('bos');
     }
-  }, [eklendi, guncellendi, setDurum]);
+  }, [eklendi, guncellendi, setDurum, setSohbetId]);
 
   const basla = useCallback(async () => {
     setHata(null);
@@ -77,6 +98,17 @@ export function useSesliAsistan(eklendi: (k: Konusma) => void, guncellendi?: (me
     kayit.record();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setDurum('dinliyor');
+    const baslangic = Date.now();
+    let konustu = false, sonSes = Date.now();
+    const izle = setInterval(() => {
+      if (durumRef.current !== 'dinliyor') return clearInterval(izle);
+      const db = kayit.getStatus().metering ?? -160;
+      if (db > SESSIZ_DB) { konustu = true; sonSes = Date.now(); }
+      if (konustu && Date.now() - sonSes > SON_SESSIZLIK_MS) { clearInterval(izle); bitirRef.current(); }
+      else if (!konustu && Date.now() - baslangic > HIC_KONUSMAZSA_MS) {
+        clearInterval(izle); kayit.stop(); setDurum('bos');  // kimse konuşmadı: gönderme
+      }
+    }, 250);
   }, [kayit, setDurum]);
 
   const bitir = useCallback(async () => {
@@ -98,11 +130,13 @@ export function useSesliAsistan(eklendi: (k: Konusma) => void, guncellendi?: (me
     }
   }, [kayit, sor, setDurum]);
 
-  return { durum, hata, basla, bitir, sor, sustur: () => { Speech.stop(); setDurum('bos'); } };
+  basladiRef.current = basla;
+  bitirRef.current = bitir;
+  return { durum, hata, basla, bitir, sor, sohbetId, setSohbetId, sustur: () => { Speech.stop(); setDurum('bos'); } };
 }
 
 export const durumYazisi: Record<Durum, string> = {
-  bos: 'Konuşmak için bas', dinliyor: 'Dinliyorum… bitirince bırak / bas', yaziya: 'Yazıya döküyorum…',
+  bos: 'Konuşmak için bas', dinliyor: 'Dinliyorum… sustuğunda gönderirim', yaziya: 'Yazıya döküyorum…',
   dusunuyor: 'Düşünüyorum…', konusuyor: 'Konuşuyorum (susturmak için bas)',
 };
 

@@ -12,12 +12,14 @@ export default function Ayarlar() {
   const r = useRenk();
   const [adres, setAdres] = useState('');
   const [dinle, setDinle] = useState(true);
+  const [sorudaDinle, setSorudaDinle] = useState(true);
   const [red, setRed] = useState<Onay[]>([]);
   const [durum, setDurum] = useState<string>('');
 
   const yenile = useCallback(async () => {
     setAdres((await ayarOku())?.adres ?? '');
     setDinle((await SecureStore.getItemAsync('acilista_dinle')) !== 'hayir');
+    setSorudaDinle((await SecureStore.getItemAsync('soruda_dinle')) !== 'hayir');
     try {
       setRed(await istek<Onay[]>('/onaylar?durum=reddedildi'));
       const d = await istek<any>('/durum', undefined, 10000);
@@ -59,6 +61,14 @@ export default function Ayarlar() {
           <Text style={{ color: r.soluk }}>Güç tuşuna basılı tutunca (veya sesle) açılınca hemen dinler. Uygulamayı kendin açınca dinlemez.</Text>
         </View>
         <Switch value={dinle} onValueChange={(v) => { setDinle(v); SecureStore.setItemAsync('acilista_dinle', v ? 'evet' : 'hayir'); }} />
+      </View>
+
+      <View style={[kart, s.satir]}>
+        <View style={{ flex: 1 }}>
+          <Text style={[s.bas, { color: r.yazi }]}>Soru sorunca cevabımı dinle</Text>
+          <Text style={{ color: r.soluk }}>Sesli konuşmada Tulpar bir şey sorarsa, okuması bitince mikrofon kendiliğinden açılır.</Text>
+        </View>
+        <Switch value={sorudaDinle} onValueChange={(v) => { setSorudaDinle(v); SecureStore.setItemAsync('soruda_dinle', v ? 'evet' : 'hayir'); }} />
       </View>
 
       <View style={kart}>
