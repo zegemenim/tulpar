@@ -30,7 +30,7 @@ YONLENDIRME = {
 BUYUK_BOSTA_KAPAT_SN = 15 * 60
 # Telefonun bağlantısı koparsa konuşma üreteci kapanmayıp "canlı" kaydını bırakmayabiliyor; bu kayıt bütün
 # arka plan işlerini sonsuza kadar bekletiyordu. Bundan eski canlı kayıtlar sayılmaz.
-CANLI_EN_FAZLA_SN = 180
+CANLI_EN_FAZLA_SN = 600  # bu işlemcide uzun bir cevap birkaç dakika sürebiliyor
 
 SEVIYE_SISTEM = ("Bir işin ne kadar düşünme gerektirdiğine karar ver. low = basit, kısa; medium = birkaç adımlı; "
                  "high = önemli, riskli veya çok adımlı (sözleşme, önemli mail, plan). "
