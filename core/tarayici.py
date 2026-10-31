@@ -2,8 +2,12 @@
 Sadece okur: indirme, form doldurma, giriş yok. Aynı anda tek tarayıcı çalışır (HP'nin RAM'i modelle paylaşılıyor),
 iş bitince kapanır. Görseller/fontlar yüklenmez. Arama Ecosia'dan (yedek Bing): Google, Brave, Yandex ve Mojeek başsız
 tarayıcıya CAPTCHA çıkarıyor; Bing ise sorgunun çoğunu yok sayıp alakasız sonuç veriyor."""
+import json
+import os
+import pathlib
 import re
 import threading
+import urllib.request
 from urllib.parse import urlencode, urlparse
 
 from kuyruk import log
@@ -46,11 +50,33 @@ def _ilgili(metin, soru, sinir=SAYFA_KARAKTER):
     return " ".join(parcalar[i] for i in sorted(secilen))
 
 
+PI_AYAR = pathlib.Path.home() / "tulpar/veri/pi-arastir.json"  # {"adres": "http://192.168.1.2:8096", "anahtar": "..."}; yoksa HP'de yapılır
+
+
 def ara(soru, n=SAYFA_SAYISI):
-    """Soruyu arar, ilk sonuçlardan okunabilen n sayfayı döndürür: [{baslik, url, metin}]."""
+    """Önce Raspberry Pi'deki tarayıcı servisine sorar (HP'nin RAM'i modele kalır); ulaşılamazsa HP'de kendisi yapar.
+    BotKorumasi Pi'den gelirse aynen yükseltilir. Döner: [{baslik, url, metin}]."""
+    try:
+        ayar = json.loads(PI_AYAR.read_text())
+        istek = urllib.request.Request(ayar["adres"] + "/ara", data=json.dumps({"soru": soru, "n": n}).encode(),
+                                       headers={"x-tulpar-anahtar": ayar["anahtar"]})
+        with urllib.request.urlopen(istek, timeout=240) as y:
+            govde = json.loads(y.read())
+        if govde.get("bot"):
+            raise BotKorumasi(govde["bot"])
+        return govde["sayfalar"]
+    except BotKorumasi:
+        raise
+    except Exception as e:  # noqa: BLE001  (dosya yok, Pi kapalı, zaman aşımı)
+        log(f"arastirma Pi'de yapilamadi, HP'de yapiliyor ({type(e).__name__})")
+    return yerel_ara(soru, n)
+
+
+def yerel_ara(soru, n=SAYFA_SAYISI):
+    """Soruyu bu makinede arar, ilk sonuçlardan okunabilen n sayfayı döndürür: [{baslik, url, metin}]."""
     from playwright.sync_api import sync_playwright
     with _kilit, sync_playwright() as p:
-        tarayici = p.chromium.launch(args=["--disable-dev-shm-usage"])
+        tarayici = p.chromium.launch(args=["--disable-dev-shm-usage"], executable_path=os.environ.get("TULPAR_CHROMIUM") or None)
         try:
             ortam = tarayici.new_context(user_agent=UA, locale="tr-TR", accept_downloads=False)
             ortam.route("**/*", lambda r: r.abort() if r.request.resource_type in ("image", "media", "font") else r.continue_())

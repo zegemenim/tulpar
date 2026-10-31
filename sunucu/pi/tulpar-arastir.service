@@ -1,0 +1,17 @@
+[Unit]
+Description=Tulpar web araştırma (salt okunur tarayıcı) — Raspberry Pi
+After=network-online.target
+
+[Service]
+User=zegemenim
+WorkingDirectory=/home/zegemenim/tulpar-pi
+Environment=TULPAR_CHROMIUM=/usr/bin/chromium
+ExecStart=/home/zegemenim/tulpar-pi/venv/bin/python /home/zegemenim/tulpar-pi/tulpar-arastir.py
+Nice=15
+# Pi'nin asıl işleri (Immich, Nextcloud...) önce gelir: bellek dolarsa ilk bu kapanır
+MemoryMax=900M
+OOMScoreAdjust=900
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

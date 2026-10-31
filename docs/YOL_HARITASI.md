@@ -48,7 +48,7 @@ Karar: model (Gemma) bölünmez (ağ gecikmesi hızı çökertir); yan işler y�
 - [x] **Konuşma sentezi (Piper) → Raspberry Pi**: `sunucu/pi/tulpar-ses.*`, Pi'de `~/tulpar-pi/`, port 8095, anahtarlı. HP `core/tts.py` önce Pi'yi dener, olmazsa yerelde üretir (HP `veri/pi-ses.json` ile bağlanır; HP ağa dönünce yazılacak). Ölçüm: 3,3 sn ses 1,2–2,4 sn'de üretiliyor.
 - [ ] **Yedekleme → Pi SSD (734 GB boş)**: HP `veri/` (tulpar.db, haric.json, sohbet-modlari.json, sahip.json, anahtar) ve model dosyaları günlük `rsync` ile; Pi'deki Immich/Nextcloud verilerine dokunulmaz.
 - [ ] **Model dosyaları deposu → Pi SSD**: GGUF'lar (Q8, Q3_K_XL, birleşmiş Q3_K_M) HP'de yer açmak için Pi'de saklanır.
-- [ ] **Web araştırması (tarayıcı) → VDS**: Pi'nin boş RAM'i ~1,4 GB (CasaOS, Immich, Nextcloud...) Chromium için sınırda; VDS'te ~4 GB boş. HP `core/tarayici.py` uzaktan çağıracak, salt okunur kuralları aynen sürer.
+- [x] **Web araştırması (tarayıcı) → Raspberry Pi**: `sunucu/pi/tulpar-arastir.*`, port 8096, anahtarlı, sistem Chromium, `MemoryMax=900M` + `OOMScoreAdjust=900` (bellek dolarsa ilk bu kapanır; Immich/Nextcloud etkilenmez). Ölçüm: 2 sayfalık araştırma 35 sn, kullanılabilir RAM en düşük ~1,2 GB. HP `core/tarayici.py` önce Pi'yi dener, olmazsa HP'de yapar (HP `veri/pi-arastir.json` ile bağlanır; HP ağa dönünce yazılacak). VDS kullanılmıyor: iki cihaz yeter.
 - [ ] RAM yükseltmesi: 2×16 GB (eşleşen çift; 24 GB karışık çiftli kanalı bozar). Hız değil kararlılık/önbellek kazandırır.
 - Küçük model (sınıflandırma) Pi/VDS'e kurulmayacak: kural tabanlı eleme (kanal/bülten) aynı işi bedavaya yapıyor.
 
