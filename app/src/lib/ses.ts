@@ -5,7 +5,7 @@ import { File } from 'expo-file-system';
 import * as Speech from 'expo-speech';
 import * as Haptics from 'expo-haptics';
 import * as SecureStore from 'expo-secure-store';
-import { konusAkis, sentezle, sesGonder } from './api';
+import { konusAkis, sentezle, sesGonder, sesiIsit } from './api';
 import { mikrofonuIste } from './dinleIstegi';
 
 export type Durum = 'bos' | 'dinliyor' | 'yaziya' | 'dusunuyor' | 'konusuyor';
