@@ -1,0 +1,14 @@
+[Unit]
+Description=Tulpar konuşma sentezi (Piper) — Raspberry Pi
+After=network-online.target
+
+[Service]
+User=zegemenim
+WorkingDirectory=/home/zegemenim/tulpar-pi
+ExecStart=/home/zegemenim/tulpar-pi/venv/bin/python /home/zegemenim/tulpar-pi/tulpar-ses.py
+Nice=10
+MemoryMax=600M
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

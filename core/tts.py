@@ -1,9 +1,12 @@
 """Konuşma sentezi (HP'de, çevrimdışı): Piper Türkçe ses. Telefonun kendi sesi yerine bu kullanılır; böylece
 Türkçe karakterler ve tonlama telefon ayarlarından bağımsız doğru çıkar. İngilizce terimler için telaffuz sözlüğü var."""
 import io
+import json
+import pathlib
 import re
 import threading
 import time
+import urllib.request
 import wave
 
 from kuyruk import log
@@ -48,12 +51,30 @@ def _yukle():
         _ses = PiperVoice.load(MODEL)
 
 
+PI_AYAR = pathlib.Path.home() / "tulpar/veri/pi-ses.json"  # {"adres": "http://192.168.1.2:8095", "anahtar": "..."}; yoksa hep yerelde üretilir
+
+
+def _pi_uret(metin: str):
+    """Raspberry Pi'deki Piper servisine sorar (HP'nin işlemcisini rahatlatır). Ulaşılamazsa None: yerelde üretilir."""
+    try:
+        ayar = json.loads(PI_AYAR.read_text())
+        istek = urllib.request.Request(ayar["adres"] + "/uret", data=json.dumps({"metin": metin}).encode(),
+                                       headers={"x-tulpar-anahtar": ayar["anahtar"]})
+        with urllib.request.urlopen(istek, timeout=20) as y:
+            return y.read() or None
+    except Exception:  # noqa: BLE001  (dosya yok, Pi kapalı, zaman aşımı...)
+        return None
+
+
 def uret(metin: str) -> bytes:
-    """Metni WAV bayt dizisi olarak üretir."""
+    """Metni WAV bayt dizisi olarak üretir. Önce Pi'ye, olmazsa HP'de yerelde."""
     global _son
     metin = duzelt(metin).strip()
     if not metin:
         return b""
+    pi = _pi_uret(metin)
+    if pi:
+        return pi
     with _kilit:
         _yukle()
         _son = time.time()
