@@ -177,9 +177,15 @@ def gorev_guncelle(gid: int, govde: dict = Body(...)):
 
 def _modlar():
     try:
-        return json.loads((VERI / "sohbet-modlari.json").read_text())
+        modlar = json.loads((VERI / "sohbet-modlari.json").read_text())
     except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+        modlar = {}
+    try:  # kapalı sohbetler haric.json'da tutulur; uygulamaya "kapali" olarak görünmeli (yoksa varsayılan moda dönmüş gibi görünür)
+        for sid in json.loads((VERI / "haric.json").read_text()).get("sohbetler", []):
+            modlar[sid] = "kapali"
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    return modlar
 
 
 @router.get("/sohbetler")
@@ -211,7 +217,7 @@ def sohbet_mod(sid: str, govde: dict = Body(...)):
     mod = govde.get("mod")
     if mod not in ("tam", "onemli", "kapali"):
         raise HTTPException(400, "mod: tam | onemli | kapali")
-    modlar = _modlar()
+    modlar = {k: v for k, v in _modlar().items() if v != "kapali"}
     haric_yol = VERI / "haric.json"
     haric = set(json.loads(haric_yol.read_text()).get("sohbetler", [])) if haric_yol.exists() else set()
     if mod == "kapali":
@@ -369,7 +375,7 @@ def _arac_uygula(metin, dogrudan=False, gecmis=None, sid=None):
     k, bugun = _baglam["kuyruk"], _baglam["bugun"]()
     istem = _baglam["istem"]["system_tool"].replace("{bugun}", bugun) + ADIM_KURALI
     if dogrudan:
-        karar = llm.sor("hizli", istem, metin, gecmis=gecmis)
+        karar = llm.sor("hizli", istem, metin, gecmis=gecmis, slot=2)
     else:
         karar = k.ekle(Is("komut", istem, metin)).bekle(180)
     karar = karar or {}
@@ -505,7 +511,7 @@ def konus_akis(govde: dict = Body(...)):
             sabit = eylem.pop("sabit", None) if eylem else None
             yield json.dumps({"tur": "eylem", "eylem": eylem, "arac": arac}, ensure_ascii=False) + "\n"
             try:
-                for parca in ([sabit] if sabit else llm.akis("hizli", sistem, metin, gecmis=gecmis)):
+                for parca in ([sabit] if sabit else llm.akis("hizli", sistem, metin, gecmis=gecmis, slot=2)):
                     cevap.append(parca)
                     yield json.dumps({"tur": "parca", "metin": parca}, ensure_ascii=False) + "\n"
             except Exception as e:

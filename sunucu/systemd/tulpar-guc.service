@@ -1,9 +1,9 @@
 [Unit]
-Description=Tulpar CPU guc siniri (sadece Linux)
+Description=Tulpar CPU guc siniri: 25 W surekli / 35 W kisa sureli (varsayilan 15 W; kullanici ekstra sogutma ekledi)
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c "echo 15000000 > /sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw; echo 20000000 > /sys/class/powercap/intel-rapl:0/constraint_1_power_limit_uw"
+ExecStart=/bin/sh -c "echo 25000000 > /sys/class/powercap/intel-rapl:0/constraint_0_power_limit_uw; echo 35000000 > /sys/class/powercap/intel-rapl:0/constraint_1_power_limit_uw"
 
 [Install]
 WantedBy=multi-user.target

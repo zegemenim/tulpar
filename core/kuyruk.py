@@ -45,6 +45,10 @@ def log(mesaj):
 _sira = itertools.count()
 
 
+# model yuvaları (llama-server -np 3): eleme / taslak / kullanıcıyla konuşma ayrı yuvada; her biri kendi baş kısmını önbellekte tutar
+YUVA = {"eleme": 0, "taslak": 1, "komut": 2}
+
+
 @dataclass(order=True)
 class Is:
     sira_anahtari: tuple = field(init=False, repr=False)
@@ -99,7 +103,8 @@ class Kuyruk:
 
     def _calistir(self, is_, durdur=None):
         t0 = time.time()
-        is_.sonuc = llm.sor(is_.model, is_.sistem, is_.kullanici, is_.json_cevap, is_.dusunme, durdur)
+        is_.sonuc = llm.sor(is_.model, is_.sistem, is_.kullanici, is_.json_cevap, is_.dusunme, durdur,
+                                slot=YUVA.get(is_.tur))
         log(f"is bitti: {is_.tur} {is_.model} ({time.time() - t0:.0f} sn)")
 
     def canli(self):

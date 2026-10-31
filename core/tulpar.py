@@ -287,6 +287,9 @@ def mesaj(m: dict = Body(...)):
     if m.get("gecmis"):  # ilk bağlantıda alınan eski mesajlar: sadece üslup ve hafıza için, elenmez
         db.eleme_kaydet(m["id"], {"gecmis": True})
         return {"tamam": True}
+    if m["sohbet_id"].endswith(("@newsletter", "@broadcast")):  # kanal/bülten/durum: model değerlendirmesine girmez (zaman ve bellek harcamasın)
+        db.eleme_kaydet(m["id"], {"atla": "kanal"})
+        return {"tamam": True}
     with _kilit:
         d = _sohbet.setdefault(m["sohbet_id"], {"son": 0, "eleme": 0, "gelenler": [], "zamanlayici": False})
         if m.get("benden"):
