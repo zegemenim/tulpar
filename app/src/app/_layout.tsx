@@ -5,7 +5,7 @@ import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
 import * as SecureStore from 'expo-secure-store';
 import { startActivityAsync } from 'expo-intent-launcher';
-import { ayarOku } from '../lib/api';
+import { ayarOku, servisAyariniYaz } from '../lib/api';
 import { sesModeliniIndir } from '../lib/guncelleme';
 import { bildirimleriBaslat } from '../lib/bildirim';
 import { useRenk } from '../lib/tema';
@@ -20,6 +20,7 @@ export default function Kok() {
       if (!a) router.replace('/kurulum');
       else {
         bildirimleriBaslat().catch(() => {});
+        servisAyariniYaz().catch(() => {});
         // Uyandırma ayarı açıksa servisi (yeniden) başlat: güncelleme/yeniden başlatma sonrası Android onu kapatır
         // (model telefonda yoksa önce HP'den iner; kuruluysa hiçbir şey indirmez)
         SecureStore.getItemAsync('uyandirma').then(async (v) => {

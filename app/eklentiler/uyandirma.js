@@ -26,6 +26,10 @@ import android.os.Looper
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
+import android.net.Uri
+import java.net.HttpURLConnection
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import org.vosk.Model
 import org.vosk.Recognizer
 import org.vosk.SpeakerModel
@@ -44,6 +48,10 @@ class UyandirmaServisi : Service(), RecognitionListener {
     const val KURULDU = "tulpar-kuruldu"  // model tamamen açılınca yazılır (modelde "conf" klasörü yok)
   }
   private var konusma: SpeechService? = null
+  // Bildirimler: servis zaten hep açık olduğu için sunucuyu dakikada bir o yoklar (uygulamanın arka plan görevi
+  // Android'de en erken 15 dk'da bir çalışıyor ve telefon onu sık sık durduruyor)
+  private val yoklayici = Executors.newSingleThreadScheduledExecutor()
+  private var bildirimNo = 1000
   // Uygulama mikrofonu kullanacağı zaman bu dosyayı yazar; servis hemen mikrofonu bırakır
   private var istekGozcu: FileObserver? = null
   private var model: Model? = null
@@ -119,6 +127,73 @@ class UyandirmaServisi : Service(), RecognitionListener {
     }.also { it.startWatching() }
     varyantYukle()
     Thread { hazirla() }.start()
+    yoklayici.scheduleWithFixedDelay({
+      try { yokla() } catch (e: Exception) { Log.w("Tulpar", "bildirim yoklama: " + e.message) }
+    }, 15, 60, TimeUnit.SECONDS)
+  }
+
+  // Uygulamanın yazdığı sunucu.json: {"adresler": [...], "anahtar": "..."}
+  private fun yokla() {
+    val ayar = File(filesDir, "sunucu.json")
+    if (!ayar.exists()) return
+    val j = JSONObject(ayar.readText())
+    val anahtar = j.getString("anahtar")
+    val adresler = j.getJSONArray("adresler")
+    val sonDosya = File(filesDir, "son_yoklama_servis")
+    val son = (if (sonDosya.exists()) sonDosya.readText().trim().toDoubleOrNull() else null)
+      ?: (System.currentTimeMillis() / 1000.0 - 600)
+    for (i in 0 until adresler.length()) {
+      val adres = adresler.getString(i).trimEnd('/')
+      val y: JSONObject
+      try {
+        val b = URL(adres + "/bildirimler?sonra=" + son).openConnection() as HttpURLConnection
+        b.connectTimeout = 5000; b.readTimeout = 30000
+        b.setRequestProperty("x-tulpar-anahtar", anahtar)
+        if (b.responseCode != 200) continue
+        y = JSONObject(b.inputStream.bufferedReader().use { it.readText() })
+      } catch (e: Exception) { continue }  // bu adres ulaşılamıyor: sıradakini dene (ev ağı / Tailscale)
+      bildirimleriGoster(y)
+      sonDosya.writeText(y.getDouble("zaman").toString())
+      File(filesDir, "bildirim_servisi").writeText(System.currentTimeMillis().toString())
+      return
+    }
+  }
+
+  private fun goster(baslik: String, metin: String, adres: String) {
+    val nm = getSystemService(NotificationManager::class.java)
+    nm.createNotificationChannel(NotificationChannel("tulpar_bildirim", "Tulpar bildirimleri", NotificationManager.IMPORTANCE_HIGH))
+    val ac = PendingIntent.getActivity(this, bildirimNo, Intent(Intent.ACTION_VIEW, Uri.parse(adres), this, MainActivity::class.java)
+      .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE)
+    nm.notify(bildirimNo++, Notification.Builder(this, "tulpar_bildirim").setContentTitle(baslik).setContentText(metin)
+      .setStyle(Notification.BigTextStyle().bigText(metin)).setSmallIcon(android.R.drawable.ic_dialog_info)
+      .setContentIntent(ac).setAutoCancel(true).build())
+  }
+
+  private fun bildirimleriGoster(y: JSONObject) {
+    val onemli = y.optJSONArray("onemli") ?: JSONArray()
+    for (i in 0 until onemli.length()) {
+      val o = onemli.getJSONObject(i)
+      val e = o.optJSONObject("eleme") ?: JSONObject()
+      val ad = o.optString("sohbet_adi")
+      val ozet = e.optString("ozet").ifBlank { o.optString("metin").take(120) }
+      goster(if (e.optString("aksiyon") == "uyar") "⚠️ " + ad else ad, ozet, "tulpar://")
+    }
+    val taslak = y.optJSONArray("taslaklar") ?: JSONArray()
+    if (taslak.length() == 1) {
+      val t = taslak.getJSONObject(0)
+      goster("Taslak hazır", t.optString("sohbet_adi") + ": " + t.optString("ozet"), "tulpar://taslaklar")
+    } else if (taslak.length() > 1) {
+      val adlar = (0 until taslak.length()).joinToString(", ") { taslak.getJSONObject(it).optString("sohbet_adi") }
+      goster(taslak.length().toString() + " taslak hazır", adlar, "tulpar://taslaklar")
+    }
+    val onay = y.optJSONArray("onaylar") ?: JSONArray()
+    for (i in 0 until onay.length()) goster("Onayın bekleniyor", onay.getJSONObject(i).optString("baslik"), "tulpar://")
+    val ara = y.optJSONArray("arastirmalar") ?: JSONArray()
+    for (i in 0 until ara.length()) {
+      val a = ara.getJSONObject(i)
+      goster("Araştırma bitti", a.optString("metin").substringBefore("\n\nKaynaklar:").take(300),
+        "tulpar://?sohbet=" + a.optInt("sohbet_id"))
+    }
   }
 
   // Mikrofonu uygulamaya bırakır; uygulama kayıt yaparken veya konuşurken geri almaz
@@ -275,6 +350,7 @@ class UyandirmaServisi : Service(), RecognitionListener {
   override fun onDestroy() {
     calisiyor = false
     istekGozcu?.stopWatching()
+    yoklayici.shutdownNow()
     ana.removeCallbacksAndMessages(null); durdur(); model?.close(); super.onDestroy()
   }
 }

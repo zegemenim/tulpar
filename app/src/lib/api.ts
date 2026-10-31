@@ -7,6 +7,15 @@ export type Ayar = { adres: string; anahtar: string; yedek?: string };  // yedek
 
 let onbellek: Ayar | null = null;
 
+/** Uyandırma servisinin bildirim yoklaması için sunucu bilgisi (uygulamanın kendi özel klasöründe; başka uygulama okuyamaz). */
+export async function servisAyariniYaz() {
+  const a = await ayarOku();
+  if (!a) return;
+  const f = new File(Paths.document, 'sunucu.json');
+  if (!f.exists) f.create();
+  await f.write(JSON.stringify({ adresler: [a.adres, a.yedek].filter(Boolean), anahtar: a.anahtar }));
+}
+
 export async function ayarOku(): Promise<Ayar | null> {
   if (onbellek) return onbellek;
   const adres = await SecureStore.getItemAsync('adres');
@@ -25,6 +34,7 @@ export async function ayarYaz(a: Ayar) {
   await SecureStore.setItemAsync('anahtar', a.anahtar.trim());
   await SecureStore.setItemAsync('yedek', yedek);
   onbellek = { adres, anahtar: a.anahtar.trim(), yedek: yedek || undefined };
+  await servisAyariniYaz().catch(() => {});
 }
 
 let calisanAdres: string | null = null;  // en son cevap veren adres önce denenir

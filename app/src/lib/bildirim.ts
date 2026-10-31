@@ -3,6 +3,7 @@ import * as BackgroundTask from 'expo-background-task';
 import * as Notifications from 'expo-notifications';
 import * as SecureStore from 'expo-secure-store';
 import * as TaskManager from 'expo-task-manager';
+import { File, Paths } from 'expo-file-system';
 import { istek } from './api';
 
 const GOREV = 'tulpar-yokla';
@@ -22,8 +23,15 @@ type Yeni = {
 export async function yokla() {
   const son = Number((await SecureStore.getItemAsync('son_yoklama')) || Date.now() / 1000 - 600);
   const y = await istek<Yeni>(`/bildirimler?sonra=${son}`, undefined, 30000);
-  const goster = (title: string, body: string, data: Record<string, unknown>) =>
-    Notifications.scheduleNotificationAsync({ content: { title, body, data }, trigger: null });
+  // Uyandırma servisi son 3 dk içinde yokladıysa bildirimleri o gösteriyor: burada tekrar gösterme
+  let servis = false;
+  try {
+    const f = new File(Paths.document, 'bildirim_servisi');
+    servis = f.exists && Date.now() - Number(f.textSync()) < 180000;
+  } catch {}
+  const goster = async (title: string, body: string, data: Record<string, unknown>) => {
+    if (!servis) await Notifications.scheduleNotificationAsync({ content: { title, body, data }, trigger: null });
+  };
   for (const o of y.onemli) {
     const uyari = o.eleme.aksiyon === 'uyar';
     await goster(uyari ? `⚠️ ${o.sohbet_adi}` : o.sohbet_adi, o.eleme.ozet || o.metin.slice(0, 120), { ekran: '/' });
