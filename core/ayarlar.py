@@ -20,7 +20,7 @@ SEMA = {
     "sohbet_gecmis_mesaj": ("Konuşma", "Sohbette hatırlanan mesaj",
                             "Tulpar'la sohbette modele verilen son mesaj sayısı; daha eskisi özetlenir.", 16, 4, 60),
     "whisper_bosta_sn": ("Ses", "Whisper bellekte kalma (sn)",
-                         "Mikrofona basılınca Whisper hemen belleğe alınır; son kullanımdan bu kadar sn sonra atılır (RAM Gemma'ya kalsın).", 10, 0, 3600),
+                         "Mikrofona basılınca Whisper hemen belleğe alınır; son kullanımdan bu kadar sn sonra atılır (RAM Gemma'ya kalsın).", 3, 0, 3600),
     "reddedilen_sakla_gun": ("Uygulama", "Reddedilenleri saklama (gün)",
                              "Reddettiğin onaylar bu kadar gün 'Reddedilenler'de durur, sonra silinir.", 7, 1, 90),
     "ekran_bosta_dk": ("İkinci ekran", "Kapanma süresi (dk)",

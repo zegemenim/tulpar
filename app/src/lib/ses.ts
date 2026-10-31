@@ -156,7 +156,7 @@ export function useSesliAsistan(eklendi: (k: Konusma) => void, guncellendi?: (me
     let konustu = false, sonSes = Date.now(), tik = 0;
     const izle = setInterval(() => {
       if (durumRef.current !== 'dinliyor') return clearInterval(izle);
-      if (++tik % 24 === 0) sesiIsit();  // ~6 sn'de bir: uzun konuşmada Whisper bellekten atılmasın
+      if (++tik % 4 === 0) sesiIsit();  // ~1 sn'de bir: uzun konuşmada Whisper bellekten atılmasın
       const db = kayit.getStatus().metering ?? -160;
       if (db > SESSIZ_DB) { konustu = true; sonSes = Date.now(); }
       if (konustu && Date.now() - sonSes > SON_SESSIZLIK_MS) { clearInterval(izle); bitirRef.current(); }
@@ -215,7 +215,7 @@ export function useSesleYaz(metinGeldi: (metin: string) => void) {
       kayit.record();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       ayarla('dinliyor');
-      const tut = setInterval(() => { if (durumRef.current === 'dinliyor') sesiIsit(); else clearInterval(tut); }, 6000);
+      const tut = setInterval(() => { if (durumRef.current === 'dinliyor') sesiIsit(); else clearInterval(tut); }, 1000);
     } else if (durumRef.current === 'dinliyor') {
       await kayit.stop();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
