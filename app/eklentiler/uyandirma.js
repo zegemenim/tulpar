@@ -191,7 +191,7 @@ class UyandirmaServisi : Service(), RecognitionListener {
     val ara = y.optJSONArray("arastirmalar") ?: JSONArray()
     for (i in 0 until ara.length()) {
       val a = ara.getJSONObject(i)
-      goster("Araştırma bitti", a.optString("metin").substringBefore("\n\nKaynaklar:").take(300),
+      goster("Araştırma bitti", a.optString("metin").substringBefore("\\n\\nKaynaklar:").take(300),
         "tulpar://?sohbet=" + a.optInt("sohbet_id"))
     }
   }
@@ -276,7 +276,9 @@ class UyandirmaServisi : Service(), RecognitionListener {
     if (!gecici.renameTo(zip)) throw java.io.IOException("indirme taşınamadı")
   }
 
-  private fun hazirla() = synchronized(kilit) {
+  private fun hazirla() { synchronized(kilit) { hazirlaKilitli() } }
+
+  private fun hazirlaKilitli() {
     try {
       val klasor = File(filesDir, "${MODEL_KLASOR}")
       if (!kurulu(klasor, "word_boundary.int")) {
