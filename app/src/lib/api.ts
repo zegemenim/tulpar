@@ -43,7 +43,7 @@ async function getir(a: Ayar, yol: string, init: RequestInit, zamanAsimi: number
   for (const [i, adres] of adresler.entries()) {
     const kontrol = new AbortController();
     // son aday dışındakilere kısa süre: ulaşılamıyorsa hızlıca diğerine geç
-    const z = setTimeout(() => kontrol.abort(), i === adresler.length - 1 ? zamanAsimi : Math.min(zamanAsimi, 6000));
+    const z = setTimeout(() => kontrol.abort(), i === adresler.length - 1 ? zamanAsimi : Math.min(zamanAsimi, 8000));
     try {
       const y = await getirici(adres + yol, { ...init, signal: kontrol.signal });
       calisanAdres = adres;
@@ -69,7 +69,7 @@ export async function istek<T = any>(yol: string, govde?: unknown, zamanAsimi = 
   return (await y.json()) as T;
 }
 
-export type AkisOlay = { tur: 'eylem' | 'parca' | 'hata' | 'son'; metin?: string; eylem?: { tur: string; id: number } | null; arac?: string };
+export type AkisOlay = { tur: 'basladi' | 'eylem' | 'parca' | 'hata' | 'son'; metin?: string; eylem?: { tur: string; id: number } | null; arac?: string };
 
 /** Anlık konuşma: cevap üretildikçe her satırı (olayı) geri çağırır. */
 export async function konusAkis(metin: string, olay: (o: AkisOlay) => void): Promise<void> {
@@ -123,6 +123,7 @@ export type Taslak = {
   id: number; sohbet_id: string; sohbet_adi: string; ozet: string | null; mesaj_idler: string[];
   mesajlar: Secenek[]; uyarilar: (string | object)[]; olusturma: number;
   gelenler?: { id: string; gonderen_adi: string; metin: string; zaman: number }[];
+  onceki?: { id: string; gonderen_adi: string; benden: number; metin: string; zaman: number }[];
 };
 export type Onay = {
   id: number; tur: 'claude_gorev' | 'takvim' | 'uyari' | 'taslak_teklif'; baslik: string; aciklama: string;

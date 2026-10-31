@@ -29,6 +29,13 @@ Sahibinin istekleri ve kararları. Biten işler işaretlenir; yenileri eklendik�
 9. **Fotoğraf/çıkartma anlama** (Gemma görüntü desteği)
 10. **Düzenli yeniden eğitim**: ~6 ayda bir veri otomatik hazırlanır, bildirim gelir, Colab'da tek tıkla eğitilir; eğitim konuları: mesaj üslubu, konuşma üslubu, taslak kararları/düzeltmeleri, komut alışkanlıkları, e-posta üslubu
 
+## Ek istekler
+- Taslaklarda çıkartma: sık kullanılan / favori çıkartmalardan seçip gönderebilsin, taslakta görünsün
+- Tepki (emoji reaksiyon): önce hangi mesaja hangi tepki ve bağlamı anlatıp onay alsın
+- Ana ekranda Tulpar'ın cevabının altında hızlı cevap düğmeleri
+- Sesli okuma sadece telefonun sesi açıkken
+- Uzak ekran (isteğe bağlı; terminal öncelikli)
+
 ## Notlar
 - Donanım: RAM yükseltmesi ileride (2×32 GB DDR4-3200 SO-DIMM, Çin'den yolcu beraberinde en uygun)
 - Repo şimdilik private; kişisel bilgiler `~/tulpar/veri/sahip.json` içinde, repoda yok

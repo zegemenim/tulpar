@@ -224,9 +224,13 @@ def komut(govde: dict = Body(...)):
 @app.get("/taslaklar", dependencies=[Depends(yetki)])
 def taslak_listesi(durum: str = "bekliyor"):
     liste = db.taslaklar(durum)
-    for t in liste:  # uygulamada göstermek için cevaplanan mesajların metni
+    for t in liste:  # uygulamada göstermek için cevaplanan mesajların metni ve öncesindeki konuşma
         t["gelenler"] = db.oku(f"SELECT id, gonderen_adi, metin, zaman FROM mesajlar WHERE id IN "
                                f"({','.join('?' * len(t['mesaj_idler']))})", *t["mesaj_idler"]) if t["mesaj_idler"] else []
+        ilk = min((g["zaman"] for g in t["gelenler"]), default=None)
+        t["onceki"] = list(reversed(db.oku(
+            "SELECT id, gonderen_adi, benden, metin, zaman FROM mesajlar WHERE sohbet_id=? AND zaman<? ORDER BY zaman DESC LIMIT 6",
+            t["sohbet_id"], ilk))) if ilk else []
     return liste
 
 

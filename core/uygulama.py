@@ -264,6 +264,7 @@ def konus_akis(govde: dict = Body(...)):
         raise HTTPException(400, "metin boş")
 
     def uret():
+        yield json.dumps({"tur": "basladi"}) + "\n"  # bağlantı kuruldu: uygulama bu adresin çalıştığını hemen anlasın
         with _baglam["kuyruk"].canli():
             if ISTEK_IPUCU.search(metin):  # bir iş isteniyor olabilir: önce araç kararı
                 arac, eylem, sistem = _arac_uygula(metin, dogrudan=True)

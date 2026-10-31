@@ -57,7 +57,17 @@ export default function TaslakKart({ t, bitti }: { t: Taslak; bitti: () => void 
         <Text style={{ color: r.soluk, fontSize: 12 }}>{saat(t.olusturma)}</Text>
       </View>
 
-      <Text style={[s.etiket, { color: r.soluk }]}>GELEN</Text>
+      {t.onceki?.length ? (
+        <>
+          <Text style={[s.etiket, { color: r.soluk }]}>ÖNCESİNDE</Text>
+          {t.onceki.map((o) => (
+            <Text key={o.id} style={{ color: r.soluk, fontSize: 13, marginBottom: 2 }} numberOfLines={2}>
+              <Text style={{ fontWeight: '600' }}>{o.benden ? 'Sen' : o.gonderen_adi}: </Text>{o.metin}
+            </Text>
+          ))}
+        </>
+      ) : null}
+      <Text style={[s.etiket, { color: r.soluk, marginTop: t.onceki?.length ? 8 : 0 }]}>CEVAP BEKLEYEN</Text>
       {gelenler.map((g) => (
         <View key={g.id} style={[s.gelen, { backgroundColor: r.balonO, borderColor: r.cizgi }]}>
           <Text style={{ color: r.ana, fontSize: 12, fontWeight: '600' }}>{g.gonderen_adi}</Text>
