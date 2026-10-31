@@ -35,6 +35,12 @@ def duzelt(metin: str) -> str:
     return re.sub(r"[A-Za-zÇĞİÖŞÜçğıöşü\-]+", lambda m: SOZLUK.get(m.group(0).lower(), m.group(0)), metin)
 
 
+def _ayar():
+    """Dinleme karşılaştırmasında seçilen ayar (B): biraz yavaş, tonlaması daha değişken."""
+    from piper import SynthesisConfig
+    return SynthesisConfig(length_scale=1.08, noise_scale=0.5, noise_w_scale=1.0)
+
+
 def _yukle():
     global _ses
     if _ses is None:
@@ -53,7 +59,7 @@ def uret(metin: str) -> bytes:
         _son = time.time()
         tampon = io.BytesIO()
         with wave.open(tampon, "wb") as w:
-            _ses.synthesize_wav(metin, w)
+            _ses.synthesize_wav(metin, w, syn_config=_ayar())
     return tampon.getvalue()
 
 
