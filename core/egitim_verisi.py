@@ -56,9 +56,27 @@ MASKELER = [
 ]
 
 
+_DOSYA = re.compile(r"\.(py|js|ts|tsx|md|txt|json|pdf|png|jpg|jpeg|mp4|docx?|xlsx?|zip|apk|com|org|net|io|dev|app)\b", re.I)
+
+
+def _sifre_gibi(t):
+    """Başında anahtar kelime olmasa da şifre gibi duran tek parça (rakam + harf, büyük/küçük karışık veya simge, 8-40 karakter)
+    sızıntıya yol açar (model ezberleyip yazabilir). Aşırı maskelemek, sızdırmaktan iyidir."""
+    if not 8 <= len(t) <= 40 or t.startswith(("#", "[")) or not re.search(r"\d", t) or not re.search(r"[A-Za-zÇĞİÖŞÜçğıöşü]", t):
+        return False
+    if _DOSYA.search(t) or re.fullmatch(r"[\d.:,/-]+", t) or re.search(r"\d{1,2}[.:]\d{2}", t) or re.match(r"\d+\.\w+$", t):
+        return False
+    return bool((re.search(r"[A-ZÇĞİÖŞÜ]", t) and re.search(r"[a-zçğıöşü]", t)) or re.search(r"[!@#$%^&*_+=?]", t))
+
+
+def _sifre_maskele(metin):
+    return re.sub(r"\S+", lambda m: m.group(0).replace(m.group(0).strip(".,;:()\"'"), "[gizli]") if _sifre_gibi(m.group(0).strip(".,;:()\"'")) else m.group(0), metin)
+
+
 def maskele(metin, adlar):
     for desen, yerine in MASKELER:
         metin = desen.sub(yerine, metin)
+    metin = _sifre_maskele(metin)
     for gercek, takma in adlar.items():
         metin = re.sub(rf"\b{re.escape(gercek)}\b", takma, metin, flags=re.I)
     return metin
