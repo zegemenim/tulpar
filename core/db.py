@@ -44,6 +44,15 @@ CREATE TABLE IF NOT EXISTS gorevler (
   durum TEXT DEFAULT 'acik',     -- acik | bitti
   kaynak TEXT, olusturma REAL
 );
+CREATE TABLE IF NOT EXISTS geri_bildirim (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  taslak_id INTEGER, sohbet_id TEXT,
+  tur TEXT,                      -- red | duzeltme
+  neden TEXT,                    -- sahibinin yazdığı sebep (isteğe bağlı)
+  oneri TEXT,                    -- Tulpar'ın önerdiği (JSON)
+  gonderilen TEXT,               -- sahibinin gönderdiği hali (düzeltmede, JSON)
+  zaman REAL
+);
 CREATE TABLE IF NOT EXISTS taslaklar (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   sohbet_id TEXT, sohbet_adi TEXT,
@@ -141,3 +150,15 @@ def taslak_durum(id_, durum, mesajlar=None):
             json.dumps(mesajlar, ensure_ascii=False), time.time(), id_)
     else:
         yaz("UPDATE taslaklar SET durum=?, guncel=? WHERE id=?", durum, time.time(), id_)
+
+
+def geri_bildirim_ekle(taslak, tur, neden=None, gonderilen=None):
+    yaz("""INSERT INTO geri_bildirim (taslak_id,sohbet_id,tur,neden,oneri,gonderilen,zaman) VALUES (?,?,?,?,?,?,?)""",
+        taslak["id"], taslak["sohbet_id"], tur, (neden or "").strip() or None,
+        json.dumps(taslak["mesajlar"], ensure_ascii=False), json.dumps(gonderilen, ensure_ascii=False) if gonderilen else None,
+        time.time())
+
+
+def son_geri_bildirimler(sohbet_id, n=8):
+    """Önce bu sohbetin, sonra genel son geri bildirimler (taslak istemine ders olarak eklenir)."""
+    return oku("""SELECT * FROM geri_bildirim ORDER BY (sohbet_id=?) DESC, zaman DESC LIMIT ?""", sohbet_id, n)

@@ -8,7 +8,7 @@ import threading
 import time
 
 from fastapi import APIRouter, Body, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 import db
 import llm
@@ -317,3 +317,27 @@ def terminal_bilgi():
     if not yol.exists():
         raise HTTPException(503, "terminal servisi kurulu değil")
     return {"port": 7681, "kullanici": "tulpar", "parola": yol.read_text().strip()}
+
+
+# ---------- uygulama güncelleme (APK HP'den, Tulpar anahtarıyla) ----------
+
+GUNCELLEME = VERI / "uygulama"
+
+
+@router.get("/uygulama/surum")
+def uygulama_surum():
+    """En son APK'nın sürüm numarası (Android versionCode) ve boyutu; uygulama kendi sürümüyle karşılaştırır."""
+    try:
+        bilgi = json.loads((GUNCELLEME / "surum.json").read_text())
+    except FileNotFoundError:
+        return {"surum": 0}
+    bilgi["boyut"] = (GUNCELLEME / "Tulpar.apk").stat().st_size
+    return bilgi
+
+
+@router.get("/uygulama/apk")
+def uygulama_apk():
+    yol = GUNCELLEME / "Tulpar.apk"
+    if not yol.exists():
+        raise HTTPException(404, "güncelleme yok")
+    return FileResponse(yol, media_type="application/vnd.android.package-archive", filename="Tulpar.apk")

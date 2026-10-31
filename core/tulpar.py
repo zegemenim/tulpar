@@ -175,6 +175,7 @@ def baslangic():
            time.time() - 86400)
     threading.Thread(target=yarim_kalanlari_al, daemon=True).start()
     threading.Thread(target=uygulama.isit, daemon=True).start()
+    threading.Thread(target=ses.isit, daemon=True).start()
 
 
 @app.post("/mesaj", dependencies=[Depends(yetki)])
@@ -265,14 +266,20 @@ def taslak_gonder(tid: int, govde: dict = Body(default={})):
         log(f"taslak #{tid} sahibi tarafindan duzeltildi (ogrenme icin saklandi)")
         db.yaz("UPDATE taslaklar SET uyarilar=? WHERE id=?", json.dumps(
             t["uyarilar"] + [{"orijinal": t["mesajlar"]}], ensure_ascii=False), tid)
+        db.geri_bildirim_ekle(t, "duzeltme", govde.get("neden"), mesajlar)
     db.taslak_durum(tid, "gonderildi", mesajlar)
     log(f"gonderildi #{tid}: {t['sohbet_adi']} ({len(mesajlar)} mesaj)")
     return {"tamam": True}
 
 
 @app.post("/taslak/{tid}/reddet", dependencies=[Depends(yetki)])
-def taslak_reddet(tid: int):
+def taslak_reddet(tid: int, govde: dict = Body(default={})):
+    """Reddedilen taslak ve (varsa) sebebi ders olarak saklanır; sonraki taslaklar bunu okur."""
+    t = next((x for x in db.taslaklar("bekliyor") if x["id"] == tid), None)
     db.taslak_durum(tid, "reddedildi")
+    if t:
+        db.geri_bildirim_ekle(t, "red", govde.get("neden"))
+        log(f"taslak #{tid} reddedildi" + (f": {govde['neden'][:60]}" if govde.get("neden") else ""))
     return {"tamam": True}
 
 

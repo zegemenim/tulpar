@@ -1,4 +1,5 @@
 """Cevap taslağı: kişi kartı + sahibin o kişiye/benzerlerine yazdıkları + son konuşma -> Gemma."""
+import json
 import re
 import time
 
@@ -68,6 +69,23 @@ def uslup_kontrol(kart, mesajlar):
     return uyarilar
 
 
+def dersler(sohbet_id):
+    """Sahibinin önceki taslaklara verdiği geri bildirimler: aynı hatayı tekrarlamamak için isteme eklenir."""
+    satirlar = []
+    for g in db.son_geri_bildirimler(sohbet_id):
+        bu = "bu kişi" if g["sohbet_id"] == sohbet_id else "başka bir kişi"
+        oneri = " / ".join(m["metin"] for sec in json.loads(g["oneri"] or "[]") for m in sec.get("mesajlar", []))[:200]
+        if g["tur"] == "red":
+            satirlar.append(f"- ({bu}) Reddetti: \"{oneri}\"" + (f" — sebep: {g['neden']}" if g["neden"] else ""))
+        else:
+            gonderilen = " / ".join(m["metin"] for m in json.loads(g["gonderilen"] or "[]"))[:200]
+            satirlar.append(f"- ({bu}) Önerilen: \"{oneri}\" -> sahibi bunu gönderdi: \"{gonderilen}\"")
+    if not satirlar:
+        return ""
+    return ("SAHİBİNİN ÖNCEKİ TASLAKLARA GERİ BİLDİRİMLERİ (bunlardan ders al, aynı hataları yapma):\n"
+            + "\n".join(satirlar) + "\n\n")
+
+
 def hazirla(kuyruk, sohbet_id, sohbet_adi, gelenler):
     """gelenler: cevaplanacak mesaj satırları (db.mesajlar). Taslak id'si döner."""
     gecmis = db.son_mesajlar(sohbet_id, 40)
@@ -75,7 +93,8 @@ def hazirla(kuyruk, sohbet_id, sohbet_adi, gelenler):
     ornek = ornekler(sohbet_id, kart["iliski"])
     konusma = "\n".join(f"[{m['id']}] {sahip.AD if m['benden'] else m.get('gonderen_adi') or sohbet_adi}: {m['metin']}"
                         for m in gecmis[-25:])
-    istem = (f"Kişi kartı: ad={kart.get('ad')}, ilişki={kart['iliski']}, hitap={kart.get('hitap')}, "
+    istem = (dersler(sohbet_id) +
+             f"Kişi kartı: ad={kart.get('ad')}, ilişki={kart['iliski']}, hitap={kart.get('hitap')}, "
              f"sen/siz={kart.get('sen_siz')}, not={kart.get('notlar')}\n"
              f"{sahip.AD} adlı sahibin örnek mesajları:\n" + ("\n".join(f"- {o}" for o in ornek) or "- (henüz yok)") +
              f"\n\nSon konuşma (bağlam):\n{konusma}\n\n"

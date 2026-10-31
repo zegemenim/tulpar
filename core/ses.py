@@ -23,13 +23,24 @@ def _coz(dosya):
     return np.frombuffer(ham, np.int16).astype(np.float32) / 32768.0
 
 
-def yaziya_dok(dosya):
+def _yukle():
     global _model
+    if _model is None:
+        from faster_whisper import WhisperModel
+        _model = WhisperModel("large-v3-turbo", device="cpu", compute_type="int8", cpu_threads=4,
+                              download_root=str(MODEL_YOL))
+
+
+def isit():
+    """Servis açılırken modeli belleğe yükle: ilk sesli komut beklemesin."""
+    with _kilit:
+        _yukle()
+    log("whisper yuklendi")
+
+
+def yaziya_dok(dosya):
     with _kilit:  # aynı anda tek döküm: işlemciyi modellerle paylaşıyoruz
-        if _model is None:
-            from faster_whisper import WhisperModel
-            _model = WhisperModel("large-v3-turbo", device="cpu", compute_type="int8", cpu_threads=4,
-                                  download_root=str(MODEL_YOL))
+        _yukle()
         t0 = time.time()
         # Türkçe ağırlıklı ama arada İngilizce terim geçen konuşma: dili Türkçe sabitle, ipucuyla İngilizce
         # kelimeleri olduğu gibi yazmaya yönlendir ("deploy" -> "diplay" olmasın)
