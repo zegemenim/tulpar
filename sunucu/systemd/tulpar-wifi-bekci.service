@@ -1,0 +1,6 @@
+[Unit]
+Description=Tulpar Wi-Fi bekçisi (RTL8822CE kilitlenirse kartı sıfırlar)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/tulpar-wifi-bekci
