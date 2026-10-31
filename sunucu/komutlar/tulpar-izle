@@ -12,7 +12,7 @@ import subprocess
 import threading
 import sys
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 
 sys.path.insert(0, os.path.expanduser("~/tulpar/core"))
 import ayarlar  # noqa: E402  (sunucu ayarları, menüden değiştirilir)
@@ -122,50 +122,135 @@ def gb(kb):
     return kb / 1048576
 
 
-def ciz(ekr, durum, ust, kaydir):
+RAM_RENK = {"Gemma (model)": 6, "Tulpar + Whisper": 7}
+SPARK = "▁▂▃▄▅▆▇█"
+
+
+def spark(degerler, en):
+    """Son değerlerin mini grafiği (0-100)."""
+    d = list(degerler)[-en:]
+    return "".join(SPARK[min(7, int(v / 100 * 7.99))] for v in d).rjust(en)
+
+
+def ciz(ekr, s, kaydir):
     ekr.erase()
     yuk, gen = ekr.getmaxyx()
-    renk = lambda y: curses.color_pair(3 if y >= 95 else 2 if y >= 85 else 1)
+    R = curses.color_pair
 
-    def yaz(y, x, metin, ozellik=0):
-        if 0 <= y < yuk and x < gen:
+    def yaz(y, x, metin, oz=0, en=None):
+        if 0 <= y < yuk and 0 <= x < gen - 1:
             try:
-                ekr.addnstr(y, x, metin, max(0, gen - x - 1), ozellik)
+                ekr.addnstr(y, x, metin, max(0, min(en or gen, gen - x - 1)), oz)
             except curses.error:
                 pass
 
-    s = durum
-    yaz(0, 0, f" TULPAR  {time.strftime('%H:%M:%S')}   açık: {s['acik']}", curses.color_pair(4) | curses.A_BOLD)
-    yaz(1, 1, f"Sıcaklık {s['sicak']}°C   CPU %{s['cpu']:.0f}   Model: {s['model']}")
-    yaz(2, 1, "RAM ")
-    yaz(2, 5, f"%{s['ram_y']}", renk(s['ram_y']) | curses.A_BOLD)
-    yaz(2, 10, f"{gb(s['kul']):.1f} / {gb(s['top']):.1f} GB kullanımda  "
-               f"(model önbelleği {gb(s['gdosya']):.1f} GB · gerçekten boş {gb(s['bos']):.1f} GB)")
-    sw_r = 3 if s['swap'] > 512 * 1024 else 2 if s['swap'] > 100 * 1024 else 1
-    yaz(3, 1, "Swap (sanal RAM, diskte) ")
-    yaz(3, 26, f"{gb(s['swap']):.1f} GB", curses.color_pair(sw_r) | curses.A_BOLD)
-    yaz(3, 36, f"diske {s['swap_out']:.1f} MB/sn · diskten {s['swap_in']:.1f} MB/sn · "
-               f"SSD okuma {s['ssd_oku']:.0f} MB/sn yazma {s['ssd_yaz']:.0f} MB/sn")
-    yaz(4, 1, f"Disk {s['disk']}   {s['indirme']}")
-    yaz(5, 1, f"{'UYGULAMA':<24}{'CPU':>7}{'RAM':>10}{'SWAP':>10}", curses.A_UNDERLINE)
-    satir = 6
-    for ad, (cpu, rss, swp) in s['tablo']:
-        yaz(satir, 1, f"{ad[:23]:<24}{cpu:>6.0f}%{gb(rss):>8.2f}GB{gb(swp):>8.2f}GB")
-        satir += 1
-    yaz(satir, 0, "─" * (gen - 1), curses.color_pair(5))
-    alt = satir + 1
-    alan = yuk - alt - 1
+    def kutu(y, x, h, w, baslik):
+        if h < 2 or w < 4:
+            return
+        yaz(y, x, "╭" + "─" * (w - 2) + "╮", R(5))
+        for i in range(1, h - 1):
+            yaz(y + i, x, "│", R(5)); yaz(y + i, x + w - 1, "│", R(5))
+        yaz(y + h - 1, x, "╰" + "─" * (w - 2) + "╯", R(5))
+        yaz(y, x + 2, f" {baslik} ", R(4) | curses.A_BOLD)
+
+    def esik(y):
+        return 3 if y >= 90 else 2 if y >= 75 else 1
+
+    def cubuk(y, x, en, oran, renk):
+        dolu = int(en * max(0.0, min(1.0, oran)))
+        yaz(y, x, "█" * dolu, R(renk)); yaz(y, x + dolu, "░" * (en - dolu), R(5))
+
+    # ── üst şerit
+    yaz(0, 0, " " * (gen - 1), R(8))
+    yaz(0, 1, " TULPAR ", R(8) | curses.A_BOLD)
+    yaz(0, 10, f"{time.strftime('%H:%M:%S')}   açık {s['acik']}   model: {s['model']}", R(8))
+    if s["indirme"]:
+        yaz(0, max(10, gen - len(s["indirme"]) - 3), s["indirme"], R(8))
+
+    iki = gen >= 100
+    sol_w = gen // 2 if iki else gen
+    sag_x, sag_w = (sol_w, gen - sol_w) if iki else (0, gen)
+    cb = max(10, sol_w - 34)  # çubuk genişliği
+
+    # ── sol panel: sistem
+    sy = 1
+    sh = 11
+    kutu(sy, 0, sh, sol_w, "SİSTEM")
+    x = 2
+    yaz(sy + 1, x, "CPU ", curses.A_BOLD); cubuk(sy + 1, x + 6, cb, s["cpu"] / 100, esik(s["cpu"]))
+    yaz(sy + 1, x + 7 + cb, f"%{s['cpu']:3.0f}", R(esik(s["cpu"])) | curses.A_BOLD)
+    yaz(sy + 2, x + 6, spark(s["cpu_g"], cb), R(4))
+
+    # RAM: Gemma / Tulpar / diğer / boş renk renk
+    top = s["top"]
+    parcalar = [(s["gemma"], 6), (s["tulpar"], 7), (max(0, s["kul"] - s["gemma"] - s["tulpar"]), 2)]
+    yaz(sy + 3, x, "RAM ", curses.A_BOLD)
+    px = x + 6
+    for kb, renk in parcalar:
+        n = int(cb * kb / top)
+        yaz(sy + 3, px, "█" * n, R(renk)); px += n
+    yaz(sy + 3, px, "░" * max(0, x + 6 + cb - px), R(5))
+    yaz(sy + 3, x + 7 + cb, f"%{s['ram_y']}", R(esik(s["ram_y"])) | curses.A_BOLD)
+    yaz(sy + 4, x + 6, f"{gb(s['kul']):.1f}/{gb(top):.1f} GB   ", curses.A_BOLD)
+    lx = x + 22
+    for ad, kb, renk in (("Gemma", s["gemma"], 6), ("Tulpar", s["tulpar"], 7),
+                         ("diğer", max(0, s["kul"] - s["gemma"] - s["tulpar"]), 2), ("boş", s["bos"], 5)):
+        yaz(sy + 4, lx, "■", R(renk)); yaz(sy + 4, lx + 2, f"{ad} {gb(kb):.1f}"); lx += len(ad) + 8
+    yaz(sy + 5, x + 6, spark(s["ram_g"], cb), R(6))
+
+    sw_y = int(100 * s["swap"] / max(1, s["swap_top"]))
+    yaz(sy + 6, x, "SWAP", curses.A_BOLD); cubuk(sy + 6, x + 6, cb, sw_y / 100, 3 if s["swap"] > 512 * 1024 else 2 if s["swap"] > 0 else 1)
+    yaz(sy + 6, x + 7 + cb, f"{gb(s['swap']):.1f} GB", R(3 if s["swap"] > 512 * 1024 else 1))
+    yaz(sy + 7, x + 6, f"diske ↓ {s['swap_out']:.1f} MB/s   diskten ↑ {s['swap_in']:.1f} MB/s  (RAM'e sığmayan)", R(5))
+    yaz(sy + 8, x, "SSD ", curses.A_BOLD)
+    yaz(sy + 8, x + 6, f"okuma {s['ssd_oku']:5.0f} MB/s   yazma {s['ssd_yaz']:4.0f} MB/s   disk {s['disk']}")
+    yaz(sy + 9, x, "ISI ", curses.A_BOLD); cubuk(sy + 9, x + 6, cb, s["sicak"] / 100, esik(s["sicak"] + 5))
+    yaz(sy + 9, x + 7 + cb, f"{s['sicak']}°C", R(esik(s["sicak"] + 5)) | curses.A_BOLD)
+
+    # ── sağ panel: uygulamalar
+    ry = 1 if iki else sy + sh
+    rh = sh if iki else min(10, len(s["tablo"]) + 3)
+    kutu(ry, sag_x, rh, sag_w, "UYGULAMALAR")
+    tw = sag_w - 4
+    yaz(ry + 1, sag_x + 2, f"{'':2}{'ad':<20}{'CPU':>5}  {'RAM':>8}  {'swap':>6}", R(5))
+    en_cok = max((r for _, (_, r, _) in s["tablo"]), default=1) or 1
+    for i, (ad, (cpu, rss, swp)) in enumerate(s["tablo"][:rh - 3]):
+        y = ry + 2 + i
+        renk = RAM_RENK.get(ad, 0)
+        yaz(y, sag_x + 2, "●", R(renk) if renk else R(5))
+        yaz(y, sag_x + 4, f"{ad[:19]:<20}", curses.A_BOLD if renk else 0)
+        yaz(y, sag_x + 24, f"{cpu:4.0f}%", R(esik(cpu)) if cpu >= 1 else R(5))
+        yaz(y, sag_x + 31, f"{gb(rss):6.2f}GB")
+        yaz(y, sag_x + 41, f"{gb(swp):5.1f}" if swp > 10240 else "    -", R(3) if swp > 512 * 1024 else R(5))
+        if tw > 52:
+            cubuk(y, sag_x + 48, min(tw - 46, 20), rss / en_cok, renk or 5)
+
+    # ── olaylar
+    oy = max(sy + sh, ry + rh)
+    oh = yuk - oy - 1
+    kutu(oy, 0, oh, gen, "OLAYLAR")
+    alan = max(1, oh - 2)
     with kilit:
         n = len(olaylar)
         bas = max(0, n - alan - kaydir)
         gorunen = olaylar[bas:bas + alan]
     for i, ol in enumerate(gorunen):
-        r = 3 if ("HATA" in ol or "hata" in ol) else 2 if ("UYARI" in ol or "onay" in ol or "BILDIRIM" in ol) \
-            else 1 if ("bitti" in ol or "hazir" in ol or "indi:" in ol or "gonderildi" in ol) else 0
-        yaz(alt + i, 0, ol, curses.color_pair(r) if r else 0)
-    konum = "CANLI" if kaydir == 0 else f"{kaydir} satır geride (End: canlıya dön)"
-    yaz(yuk - 1, 0, f" ↑↓ PgUp PgDn kaydır · Home en eski · End canlı · s ayarlar · q çıkış   [{konum} · {n} olay]",
-        curses.color_pair(5))
+        zaman, _, metin = ol.partition(": ") if ": " in ol else ("", "", ol)
+        saat = zaman.split()[2] if len(zaman.split()) >= 3 else ""
+        k = metin.lower()
+        simge, renk = ("✕", 3) if ("hata" in k or "error" in k) else ("⚠", 2) if ("uyari" in k or "bildirim" in k or "supheli" in k) \
+            else ("✓", 1) if any(w in k for w in ("bitti", "hazir", "indi:", "gonderildi", "eklendi", "basladi", "acildi", "isitildi", "yuklendi")) \
+            else ("💬", 4) if ("eleme" in k or "konusma" in k or "mesaj" in k) else ("·", 5)
+        yaz(oy + 1 + i, 2, saat, R(5))
+        yaz(oy + 1 + i, 11, simge, R(renk) | curses.A_BOLD)
+        yaz(oy + 1 + i, 14, metin, R(renk) if renk in (2, 3) else 0, en=gen - 16)
+    konum = "● CANLI" if kaydir == 0 else f"⏸ {kaydir} satır geride — End: canlı"
+    yaz(oy + oh - 1, gen - len(konum) - 4, f" {konum} ", R(1 if kaydir == 0 else 2) | curses.A_BOLD)
+
+    # ── alt şerit: kısayollar
+    yaz(yuk - 1, 0, " " * (gen - 1), R(8))
+    yaz(yuk - 1, 1, " ↑↓ kaydır  PgUp/PgDn sayfa  Home en eski  End canlı  s ayarlar  q çıkış ", R(8))
+    yaz(yuk - 1, gen - 14, f"{n} olay ", R(8))
     ekr.refresh()
     return alan
 
@@ -174,8 +259,11 @@ def main(ekr):
     curses.curs_set(0)
     curses.use_default_colors()
     gri = 8 if curses.COLORS > 8 else curses.COLOR_WHITE  # 8 renkli terminallerde gri yok
-    for i, c in enumerate([curses.COLOR_GREEN, curses.COLOR_YELLOW, curses.COLOR_RED, curses.COLOR_CYAN, gri], 1):
+    renkler = [curses.COLOR_GREEN, curses.COLOR_YELLOW, curses.COLOR_RED, curses.COLOR_CYAN, gri,
+               curses.COLOR_MAGENTA, curses.COLOR_BLUE]
+    for i, c in enumerate(renkler, 1):
         curses.init_pair(i, c, -1)
+    curses.init_pair(8, curses.COLOR_BLACK, curses.COLOR_CYAN)  # üst/alt şerit
     ekr.timeout(1000)
     threading.Thread(target=olay_akisi, daemon=True).start()
     onceki_t = time.time()
@@ -184,6 +272,7 @@ def main(ekr):
     onceki_d = disk_okunan()
     onceki_p = {}
     kaydir, alan = 0, 10
+    cpu_g, ram_g = deque(maxlen=200), deque(maxlen=200)
     while True:
         simdi = time.time()
         gecen = simdi - onceki_t
@@ -210,10 +299,15 @@ def main(ekr):
             "ssd_yaz": (d[1] - onceki_d[1]) * 512 / 1048576 / max(gecen, 0.1),
             "disk": disk_ozet(),
             "indirme": indirme_ozet(),
-            "tablo": sorted(tablo.items(), key=lambda x: -x[1][1])[:max(3, min(8, ekr.getmaxyx()[0] // 4))],
+            "tablo": sorted(tablo.items(), key=lambda x: -x[1][1])[:8],
+            "swap_top": m["SwapTotal"],
+            "gemma": tablo.get("Gemma (model)", [0, 0, 0])[1],
+            "tulpar": tablo.get("Tulpar + Whisper", [0, 0, 0])[1],
         }
+        cpu_g.append(durum["cpu"]); ram_g.append(durum["ram_y"])
+        durum["cpu_g"], durum["ram_g"] = cpu_g, ram_g
         onceki_t, onceki_c, onceki_v, onceki_d = simdi, c, v, d
-        alan = ciz(ekr, durum, None, kaydir)
+        alan = ciz(ekr, durum, kaydir)
         t = ekr.getch()
         with kilit:
             n = len(olaylar)
