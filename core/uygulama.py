@@ -49,6 +49,35 @@ def onay_ekle(tur, baslik, aciklama, m=None, veri=None):
     return oid
 
 
+def _takvim_guncelle(m, kim, ozet, veri):
+    """Aynı sohbette bekleyen takvim kartı aynı konuysa yenisini açmaz, mevcut kartı yeni bilgiyle günceller."""
+    bekleyen = db.oku("SELECT * FROM onaylar WHERE tur='takvim' AND durum='bekliyor' AND sohbet_id=? ORDER BY olusturma DESC LIMIT 5",
+                      m.get("sohbet_id"))
+    if not bekleyen:
+        return False
+    liste = "\n".join(f"{i}: {o['baslik']} | {json.dumps(json.loads(o['veri'] or '{}'), ensure_ascii=False)}" for i, o in enumerate(bekleyen))
+    sistem = ('Bekleyen takvim kartları ve yeni bir mesajdan çıkan etkinlik verilir. Yeni etkinlik kartlardan biriyle AYNI etkinlikse '
+              '(aynı konu/buluşma; saat veya yer güncellenmiş olabilir) {"ayni": kart_numarası, "baslik": "güncel kısa başlık", '
+              '"tarih": "...", "saat": "..."} döndür (bilinmeyen alanı eski karttan al). Farklı bir etkinlikse {"ayni": null} döndür.')
+    icerik = f"Kartlar:\n{liste}\n\nYeni mesaj ({kim}): {m['metin'][:300]}\nÇıkan özet: {ozet} | {json.dumps(veri, ensure_ascii=False)}"
+    try:
+        k = _baglam["kuyruk"].ekle(Is("komut", sistem, icerik)).bekle(180) or {}
+        i = k.get("ayni")
+        if not isinstance(i, int) or not 0 <= i < len(bekleyen):
+            return False
+        o = bekleyen[i]
+        yeni = {"tarih": k.get("tarih") or veri.get("tarih"), "saat": k.get("saat") or veri.get("saat")}
+        baslik = f"Takvime ekle: {k.get('baslik') or ozet}"
+        db.yaz("UPDATE onaylar SET baslik=?, aciklama=?, veri=?, olusturma=? WHERE id=?", baslik,
+               f"{kim} yazdı (güncellendi): {m['metin'][:300]}\n— Önceki: {o['aciklama'][:200]}", json.dumps(yeni, ensure_ascii=False),
+               time.time(), o["id"])
+        log(f"takvim karti #{o['id']} yeni bilgiyle guncellendi")
+        return True
+    except Exception as e:
+        log(f"takvim tekrar kontrolu hatasi: {type(e).__name__}: {e}")
+        return False
+
+
 def elemeden_onay(m, sonuc):
     """Eleme sonucuna göre onay kartı açar (takvim, Claude işi, güvenlik uyarısı)."""
     kim = m.get("sohbet_adi") or "?"
@@ -56,8 +85,9 @@ def elemeden_onay(m, sonuc):
     if sonuc.get("aksiyon") == "uyar":
         onay_ekle("uyari", f"Şüpheli mesaj: {kim}", " ".join(sonuc.get("kural_notlari") or [ozet]), m)
     elif sonuc.get("aksiyon") == "takvim" and sonuc.get("onem") == "yuksek":
-        onay_ekle("takvim", f"Takvime ekle: {ozet}", f"{kim} yazdı: {m['metin'][:300]}", m,
-                  {"tarih": sonuc.get("tarih"), "saat": sonuc.get("saat")})
+        veri = {"tarih": sonuc.get("tarih"), "saat": sonuc.get("saat")}
+        if not _takvim_guncelle(m, kim, ozet, veri):
+            onay_ekle("takvim", f"Takvime ekle: {ozet}", f"{kim} yazdı: {m['metin'][:300]}", m, veri)
     elif sonuc.get("aksiyon") == "claude_gorev" and sonuc.get("kime") != "baskasi":
         onay_ekle("claude_gorev", f"İş isteği: {ozet}", f"{kim} yazdı: {m['metin'][:500]}", m)
 

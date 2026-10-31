@@ -253,6 +253,10 @@ def mesaj(m: dict = Body(...)):
         d = _sohbet.setdefault(m["sohbet_id"], {"son": 0, "eleme": 0, "gelenler": [], "zamanlayici": False})
         if m.get("benden"):
             d["gelenler"] = []  # sahibi kendisi cevap verdi: bu sohbet için taslağa gerek kalmadı
+            for t in db.taslaklar("bekliyor"):  # bekleyen taslaklar da kendiliğinden kalkar (ders sayılmaz)
+                if t["sohbet_id"] == m["sohbet_id"]:
+                    db.taslak_durum(t["id"], "reddedildi")
+                    log(f"taslak #{t['id']} sahibi kendisi yazdigi icin kaldirildi")
         else:
             d["son"] = time.time()
             d["eleme"] += 1
@@ -366,9 +370,11 @@ def taslak_reddet(tid: int, govde: dict = Body(default={})):
     """Reddedilen taslak ve (varsa) sebebi ders olarak saklanır; sonraki taslaklar bunu okur."""
     t = next((x for x in db.taslaklar("bekliyor") if x["id"] == tid), None)
     db.taslak_durum(tid, "reddedildi")
-    if t:
+    if t and (govde.get("neden") or "").strip():  # sebep yazılmadıysa ders sayılmaz (kendi mesajını yazmış olabilir)
         db.geri_bildirim_ekle(t, "red", govde.get("neden"))
-        log(f"taslak #{tid} reddedildi" + (f": {govde['neden'][:60]}" if govde.get("neden") else ""))
+        log(f"taslak #{tid} reddedildi: {govde['neden'][:60]}")
+    else:
+        log(f"taslak #{tid} reddedildi (sebepsiz, ders degil)")
     return {"tamam": True}
 
 
