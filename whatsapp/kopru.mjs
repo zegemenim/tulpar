@@ -200,16 +200,20 @@ http.createServer((istek, yanit) => {
   istek.on('data', (p) => { govde += p; });
   istek.on('end', async () => {
     try {
-      const { sohbet_id, metin, alinti } = JSON.parse(govde);
+      const { sohbet_id, metin, alinti, tepki } = JSON.parse(govde);
       if (haricMi(sohbet_id)) return bitir(403, { hata: 'hariç tutulan sohbet' });
-      const secenek = {};
-      if (alinti?.id) {  // alıntılanacak mesaj: Tulpar'ın hafızasındaki bilgilerle
-        secenek.quoted = {
-          key: { remoteJid: sohbet_id, id: alinti.id, fromMe: !!alinti.benden,
-            participant: isJidGroup(sohbet_id) && !alinti.benden ? alinti.gonderen_id : undefined },
-          message: { conversation: alinti.metin || '' },
-        };
+      const anahtar = alinti?.id ? {  // tepki/alıntı hedefi: Tulpar'ın hafızasındaki bilgilerle
+        remoteJid: sohbet_id, id: alinti.id, fromMe: !!alinti.benden,
+        participant: isJidGroup(sohbet_id) && !alinti.benden ? alinti.gonderen_id : undefined,
+      } : null;
+      if (tepki) {  // emoji tepkisi: hedef mesaja, metin göndermeden
+        if (!anahtar) return bitir(400, { hata: 'tepki için hedef mesaj gerekli' });
+        await sock.sendMessage(sohbet_id, { react: { text: tepki, key: anahtar } });
+        log(`WhatsApp tepki (${tepki}): ${ad(sohbet_id)}`);
+        return bitir(200, { tepki: true });
       }
+      const secenek = {};
+      if (anahtar) secenek.quoted = { key: anahtar, message: { conversation: alinti.metin || '' } };
       const m = await sock.sendMessage(sohbet_id, { text: metin }, secenek);
       log(`WhatsApp gonderildi: ${ad(sohbet_id)}`);
       bitir(200, { id: m?.key?.id });

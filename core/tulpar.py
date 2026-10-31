@@ -319,7 +319,8 @@ def taslak_gonder(tid: int, govde: dict = Body(default={})):
                 r = db.oku("SELECT id, gonderen_id, benden, metin FROM mesajlar WHERE id=?", m["yanit_id"])
                 alinti = r[0] if r else None
             istek = urllib.request.Request(KOPRU + "/gonder", data=json.dumps(
-                {"sohbet_id": t["sohbet_id"], "metin": m["metin"], "alinti": alinti}, ensure_ascii=False).encode(),
+                {"sohbet_id": t["sohbet_id"], "metin": m["metin"], "alinti": alinti, "tepki": m.get("tepki")},
+                ensure_ascii=False).encode(),
                 headers={"Content-Type": "application/json", "x-tulpar-anahtar": ANAHTAR})
             urllib.request.urlopen(istek, timeout=60)
             time.sleep(1.5)
@@ -335,6 +336,28 @@ def taslak_gonder(tid: int, govde: dict = Body(default={})):
     db.taslak_durum(tid, "gonderildi", mesajlar)
     log(f"gonderildi #{tid}: {t['sohbet_adi']} ({len(mesajlar)} mesaj)")
     return {"tamam": True}
+
+
+@app.post("/mesaj/{mid}/tepki", dependencies=[Depends(yetki)])
+def tepki_taslagi(mid: str, govde: dict = Body(...)):
+    """Bir mesaja emoji tepkisi için taslak açar. Gönderim yine onayla olur (taslaklardan)."""
+    emoji = (govde.get("emoji") or "").strip()
+    if not emoji or len(emoji) > 8:
+        raise HTTPException(400, "emoji gerekli")
+    r = db.oku("SELECT id, sohbet_id, sohbet_adi, gonderen_adi, metin FROM mesajlar WHERE id=?", mid)
+    if not r:
+        raise HTTPException(404, "mesaj yok")
+    m = r[0]
+    try:  # hariç tutulan (KAPALI) sohbete tepki de gitmez
+        if m["sohbet_id"] in set(json.loads((VERI / "haric.json").read_text()).get("sohbetler", [])):
+            raise HTTPException(403, "bu sohbet kapalı")
+    except FileNotFoundError:
+        pass
+    ozet = f"Tepki: {emoji} → {m['gonderen_adi'] or m['sohbet_adi']}: {m['metin'][:60]}"
+    tid = db.taslak_ekle(m["sohbet_id"], m["sohbet_adi"], [mid], ozet,
+                         [{"etiket": f"Tepki {emoji}", "mesajlar": [{"yanit_id": mid, "metin": emoji, "tepki": emoji}]}], [])
+    log(f"tepki taslagi #{tid}: {emoji} -> {m['sohbet_adi']}")
+    return {"taslak": tid}
 
 
 @app.post("/taslak/{tid}/reddet", dependencies=[Depends(yetki)])
