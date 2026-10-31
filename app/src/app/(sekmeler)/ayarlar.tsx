@@ -4,9 +4,9 @@ import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 're
 import { router, useFocusEffect } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import OnayKart from '../../bilesenler/OnayKart';
-import { denetle, indirVeKur, mevcutSurum } from '../../lib/guncelleme';
+import { denetle, indirVeKur, mevcutSurum, sesModeliniIndir } from '../../lib/guncelleme';
 import { startActivityAsync } from 'expo-intent-launcher';
-import { ayarOku, istek, Onay } from '../../lib/api';
+import { ayarOku, istek, Onay, sunucuMakinesi } from '../../lib/api';
 import { useRenk } from '../../lib/tema';
 
 export default function Ayarlar() {
@@ -81,8 +81,12 @@ export default function Ayarlar() {
         <Switch value={uyandirma} onValueChange={async (v) => {
           setUyandirma(v);
           await SecureStore.setItemAsync('uyandirma', v ? 'evet' : 'hayir');
+          if (v) {
+            try { await sesModeliniIndir(); } catch (e: any) { Alert.alert('Ses modeli indirilemedi', e.message); }
+          }
           await startActivityAsync('android.intent.action.MAIN', {
-            packageName: 'dev.tulpar.app', className: 'dev.tulpar.app.UyandirmaActivity', extra: { islem: v ? 'ac' : 'kapat' },
+            packageName: 'dev.tulpar.app', className: 'dev.tulpar.app.UyandirmaActivity',
+            extra: { islem: v ? 'ac' : 'kapat', model_url: `http://${await sunucuMakinesi()}:8090/uygulama/vosk-tr.zip` },
           }).catch((e: any) => Alert.alert('Açılamadı', e.message));
         }} />
       </View>

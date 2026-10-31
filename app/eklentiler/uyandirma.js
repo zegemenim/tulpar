@@ -39,10 +39,17 @@ class UyandirmaServisi : Service(), RecognitionListener {
 
   override fun onBind(intent: Intent?): IBinder? = null
 
+  private var modelAdresi: String? = null
+
+  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    intent?.getStringExtra("model_url")?.let { modelAdresi = it }
+    return START_STICKY
+  }
+
   override fun onCreate() {
     super.onCreate()
     bildirim("Ses modeli hazırlanıyor…")
-    Thread { hazirla() }.start()
+    ana.postDelayed({ Thread { hazirla() }.start() }, 500)  // önce model adresi gelsin
   }
 
   private fun bildirim(metin: String) {
@@ -60,7 +67,10 @@ class UyandirmaServisi : Service(), RecognitionListener {
       val klasor = File(filesDir, "${MODEL_KLASOR}")
       if (!File(klasor, "conf").exists()) {
         ana.post { bildirim("Türkçe ses modeli indiriliyor (37 MB, bir kez)…") }
-        ZipInputStream(URL("${MODEL_URL}").openStream()).use { zip ->
+        // önce uygulamanın HP'den indirdiği kopya (files/vosk-tr.zip), yoksa internetten
+        val yerel = File(filesDir, "vosk-tr.zip")
+        val kaynak = if (yerel.exists()) yerel.inputStream() else URL("${MODEL_URL}").openStream()
+        ZipInputStream(kaynak).use { zip ->
           var g = zip.nextEntry
           while (g != null) {
             val hedef = File(filesDir, g.name)
@@ -69,12 +79,14 @@ class UyandirmaServisi : Service(), RecognitionListener {
             g = zip.nextEntry
           }
         }
+        yerel.delete()
       }
       model = Model(klasor.absolutePath)
       ana.post { dinle() }
     } catch (e: Exception) {
       Log.e("Tulpar", "uyandirma modeli", e)
-      ana.post { bildirim("Ses modeli hazırlanamadı: " + e.message) }
+      ana.post { bildirim("Ses modeli hazırlanamadı, 1 dk sonra tekrar denenecek: " + e.message) }
+      ana.postDelayed({ Thread { hazirla() }.start() }, 60000)
     }
   }
 
@@ -125,6 +137,7 @@ class UyandirmaActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     val servis = Intent(this, UyandirmaServisi::class.java)
+    intent.getStringExtra("model_url")?.let { servis.putExtra("model_url", it) }
     if (intent.getStringExtra("islem") == "kapat") {
       stopService(servis)
     } else {

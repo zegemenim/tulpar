@@ -508,3 +508,12 @@ def ayar_degistir(govde: dict = Body(...)):
         raise HTTPException(400, str(e))
     log(f"ayar degisti: {govde['anahtar']} = {deger}")
     return {"deger": deger}
+
+
+@router.get("/uygulama/vosk")
+def uygulama_vosk():
+    """Uyandırma kelimesi için Türkçe ses modeli (telefon dış siteye bağımlı kalmasın diye HP'den verilir)."""
+    yol = GUNCELLEME / "vosk-tr.zip"
+    if not yol.exists():
+        raise HTTPException(404, "ses modeli HP'de yok")
+    return FileResponse(yol, media_type="application/zip", filename="vosk-tr.zip")
