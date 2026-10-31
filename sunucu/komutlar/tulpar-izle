@@ -1,21 +1,30 @@
 #!/bin/bash
 # Tulpar canlı izleme ekranı: üstte sistem durumu, altta olay akışı.
 # Olaylar: logger -t tulpar "mesaj"  (servisler bu etiketle yazar)
+# Geçmiş olayları kaydırarak okumak için: tulpar-izle gecmis   (↑↓ / PgUp PgDn, q ile çık)
 
-HEADER=7
+if [ "$1" = "gecmis" ]; then
+  exec journalctl -t tulpar --since "-3 days" -o short --no-hostname --no-pager | less -R +G
+fi
 
-# Süreç başına gerçek bellek: RAM'de duran (Rss) ve diske taşan (Swap), MB
-pbellek() { awk '/^Rss:/{r=$2} /^Swap:/{s=$2} END{printf "%.1f GB", r/1048576; if (s>102400) printf " (+%.1f GB swap!)", s/1048576}' "/proc/$1/smaps_rollup" 2>/dev/null; }
-bellek() {
-  local m w u sw bos
-  m=$(pgrep -x llama-server | head -1); u=$(pgrep -f "uvicorn tulpar:app" | head -1)
-  sw=$(free -m | awk '/Swap:/{printf "%.1f", $3/1024}')
-  # "kullanılabilir" Gemma'nın RAM'deki dosya parçalarını da sayar; onlar atılırsa model diskten okumaya başlar.
-  # Gerçekten boş = kullanılabilir − Gemma'nın RAM'deki dosya parçaları
-  local gdosya=0; [ -n "$m" ] && gdosya=$(awk '/^Pss_File:/{print $2}' "/proc/$m/smaps_rollup" 2>/dev/null)
-  bos=$(free -k | awk -v g="${gdosya:-0}" '/Mem:/{v=($7-g)/1048576; printf "%.1f", (v<0?0:v)}')
-  printf "Bellek: Gemma %s · Tulpar+Whisper %s · swap %s GB · gerçekten boş %s GB" \
-    "$( [ -n "$m" ] && pbellek "$m" || echo kapalı)" "$( [ -n "$u" ] && pbellek "$u" || echo -)" "$sw" "$bos"
+HEADER=8
+
+# Bellek (GB): bir sürecin RAM'de duran kısmı (dosyadan eşlenen model parçaları dahil)
+rss() { [ -n "$1" ] && awk '/^Rss:/{printf "%.1f", $2/1048576}' "/proc/$1/smaps_rollup" 2>/dev/null || echo 0; }
+bellek_satirlari() {
+  local m u w gdosya
+  m=$(pgrep -x llama-server | head -1); u=$(pgrep -f "uvicorn tulpar:app" | head -1); w=$(pgrep -f "node kopru.mjs" | head -1)
+  gdosya=0; [ -n "$m" ] && gdosya=$(awk '/^Pss_File:/{print $2}' "/proc/$m/smaps_rollup" 2>/dev/null)
+  # Toplam kullanım = programların kendi belleği + Gemma'nın RAM'deki model parçaları (Linux bunları "önbellek" sayar)
+  free -k | awk -v g="${gdosya:-0}" -v gm="$(rss "$m")" -v tu="$(rss "$u")" -v wa="$(rss "$w")" '
+    /Mem:/  {tot=$2; kul=$2-$7+g; if (kul>tot) kul=tot; bos=$7-g; if (bos<0) bos=0}
+    /Swap:/ {sw=$3}
+    END {
+      yuzde=int(100*kul/tot); diger=kul/1048576-gm-tu-wa; if (diger<0) diger=0
+      renk = yuzde>=95 ? "\033[31m" : (yuzde>=85 ? "\033[33m" : "\033[32m")
+      printf "RAM: %s%%%d\033[0m (%.1f / %.1f GB kullanımda, gerçekten boş %.1f GB)%s\n", renk, yuzde, kul/1048576, tot/1048576, bos/1048576, (sw>102400 ? sprintf("  \033[31mswap %.1f GB\033[0m", sw/1048576) : "")
+      printf "  Gemma %.1f GB · Tulpar+Whisper %.1f GB · WhatsApp %.1f GB · sistem ve diğer %.1f GB", gm, tu, wa, diger
+    }'
 }
 cleanup() { printf '\033[r\033[?25h'; clear; kill "$FEED" 2>/dev/null; exit 0; }
 trap cleanup INT TERM EXIT
@@ -38,23 +47,21 @@ color() { # değer, sarı eşiği, kırmızı eşiği
 }
 
 draw() {
-  local cols t c mem used tot disk wifi model dl
+  local cols t c disk wifi model dl
   cols=$(tput cols)
   t=$(temp); c=$(cpu)
-  read -r tot used cache < <(free -m | awk '/Mem:/{print $2, $3, $6}')
-  mem=$(( 100 * used / tot ))
   disk=$(df -h / | awk 'NR==2{print $3"/"$2" ("$5")"}')
   wifi=$(awk '/wlo1/{printf "%d dBm", $4}' /proc/net/wireless 2>/dev/null)
   m=$(pgrep -a llama-server | grep -o "[^/ ]*\\.gguf" | head -1 | sed "s/\\.gguf//")
   if [ -n "$m" ]; then model="\033[32m$m\033[0m"; else model="\033[90mkapalı\033[0m"; fi
-  dl=$(pgrep -f "wget.*gguf" >/dev/null && ls -t ~/tulpar/models/*.gguf 2>/dev/null | head -1 | xargs -r du -h | awk '{print "indiriliyor: "$2" "$1}' | sed "s|$HOME/tulpar/models/||")
+  dl=$(pgrep -x wget >/dev/null && ls -t ~/tulpar/models/*.gguf 2>/dev/null | head -1 | xargs -r du -h | awk '{print "indiriliyor: "$2" "$1}' | sed "s|$HOME/tulpar/models/||")
 
   printf '\0337\033[1;1H'
-  printf '\033[2K\033[1;36m TULPAR\033[0m  %s   açık: %s\n' "$(date '+%H:%M:%S')" "$(uptime -p | sed 's/up //')"
-  printf '\033[2K Sıcaklık: %b%s°C\033[0m   CPU: %b%%%s\033[0m   RAM: %b%%%s\033[0m (%s/%s MB, model önbelleği %s MB)\n' \
-    "$(color "$t" 70 85)" "$t" "$(color "$c" 60 90)" "$c" "$(color "$mem" 75 90)" "$mem" "$used" "$tot" "$cache"
-  printf '\033[2K Disk: %s   Wi-Fi: %s   Model: %b\n' "$disk" "${wifi:-?}" "$model"
-  printf '\033[2K %s\n' "$(bellek)"
+  printf '\033[2K\033[1;36m TULPAR\033[0m  %s   açık: %s   \033[90m(geçmiş: tulpar-izle gecmis)\033[0m\n' "$(date '+%H:%M:%S')" "$(uptime -p | sed 's/up //')"
+  printf '\033[2K Sıcaklık: %b%s°C\033[0m   CPU: %b%%%s\033[0m   Disk: %s   Wi-Fi: %s\n' \
+    "$(color "$t" 70 85)" "$t" "$(color "$c" 60 90)" "$c" "$disk" "${wifi:-?}"
+  bellek_satirlari | while IFS= read -r l; do printf '\033[2K %b\n' "$l"; done
+  printf '\033[2K Model: %b\n' "$model"
   printf '\033[2K \033[90m%s\033[0m\n' "${dl:-}"
   printf '\033[2K\033[90m%*s\033[0m\n' "$cols" '' | tr ' ' '-'
   printf '\033[2K\n\0338'

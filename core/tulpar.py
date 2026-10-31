@@ -65,7 +65,12 @@ app.include_router(uygulama.router, dependencies=[Depends(yetki)])
 uygulama.bagla(kuyruk, ISTEM, bugun, lambda m: taslak.hazirla(kuyruk, m["sohbet_id"], m.get("sohbet_adi"), [m]))
 
 
-GRUP_TOPLAMA_SN = 60  # grupta art arda gelenler bu kadar sessizlikten sonra tek seferde değerlendirilir
+GRUP_TOPLAMA_SN = 60    # grupta art arda gelenler bu kadar sessizlikten sonra tek seferde değerlendirilir
+BIREBIR_TOPLAMA_SN = 20  # birebirde daha kısa: acil bir şey olabilir
+
+def _toplama_sn(m):
+    return GRUP_TOPLAMA_SN if m.get("grup") else BIREBIR_TOPLAMA_SN
+
 _grup = {}  # sohbet_id -> {"mesajlar": [...], "son": zaman, "zamanlayici": bool}
 
 
@@ -78,13 +83,13 @@ def grup_bekle(m):
         if g["zamanlayici"]:
             return
         g["zamanlayici"] = True
-    threading.Timer(GRUP_TOPLAMA_SN, grup_ele, args=(m["sohbet_id"],)).start()
+    threading.Timer(_toplama_sn(m), grup_ele, args=(m["sohbet_id"],)).start()
 
 
 def grup_ele(sohbet_id):
     with _kilit:
         g = _grup[sohbet_id]
-        kalan = GRUP_TOPLAMA_SN - (time.time() - g["son"])
+        kalan = (_toplama_sn(g["mesajlar"][-1]) if g["mesajlar"] else 0) - (time.time() - g["son"])
         if kalan > 0:
             threading.Timer(kalan + 1, grup_ele, args=(sohbet_id,)).start()
             return
@@ -94,10 +99,11 @@ def grup_ele(sohbet_id):
     temsilci = mesajlar[-1]
     for x in mesajlar[:-1]:  # tek tek model çalıştırma: hepsi temsilcinin değerlendirmesinde birlikte okunur
         db.eleme_kaydet(x["id"], kurallar.uygula({"onem": "dusuk", "aksiyon": "yok", "toplu": temsilci["id"]},
-                                                  x["metin"], True))
+                                                  x["metin"], bool(x.get("grup"))))
         with _kilit:
             _sohbet[sohbet_id]["eleme"] -= 1
-    log(f"grup toplu degerlendiriliyor: {temsilci.get('sohbet_adi', '?')[:30]} ({len(mesajlar)} mesaj, tek is)")
+    if len(mesajlar) > 1:
+        log(f"toplu degerlendiriliyor: {temsilci.get('sohbet_adi', '?')[:30]} ({len(mesajlar)} mesaj, tek is)")
     ele(temsilci, toplu=mesajlar)
 
 
@@ -240,8 +246,8 @@ def mesaj(m: dict = Body(...)):
     if not m.get("benden"):
         if m.get("ses_dosyasi"):
             threading.Thread(target=sesliyse_dok_sonra_ele, args=(m,), daemon=True).start()
-        elif m.get("grup") and not kurallar.guvenlik_kontrol(m["metin"]):
-            grup_bekle(m)  # grup: susunca toplu (güvenlik kuralına takılan mesaj beklemeden tek başına)
+        elif not kurallar.guvenlik_kontrol(m["metin"]):
+            grup_bekle(m)  # kişi/grup susunca toplu (güvenlik kuralına takılan mesaj beklemeden tek başına)
         else:
             threading.Thread(target=ele, args=(m,), daemon=True).start()
     return {"tamam": True}
