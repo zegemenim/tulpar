@@ -17,7 +17,9 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
 import android.os.Build
+import android.os.FileObserver
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -36,7 +38,14 @@ import java.util.zip.ZipInputStream
 import kotlin.math.sqrt
 
 class UyandirmaServisi : Service(), RecognitionListener {
+  companion object {
+    @Volatile var calisiyor = false  // bekçi alarmı bakar: telefon servisi öldürdüyse yeniden açılır
+    private val kilit = Any()
+    const val KURULDU = "tulpar-kuruldu"  // model tamamen açılınca yazılır (modelde "conf" klasörü yok)
+  }
   private var konusma: SpeechService? = null
+  // Uygulama mikrofonu kullanacağı zaman bu dosyayı yazar; servis hemen mikrofonu bırakır
+  private var istekGozcu: FileObserver? = null
   private var model: Model? = null
   private var spkModel: SpeakerModel? = null
   private val ana = Handler(Looper.getMainLooper())
@@ -94,17 +103,45 @@ class UyandirmaServisi : Service(), RecognitionListener {
         varyantYukle()
       }
       "yukle" -> varyantYukle()
-      "duraklat" -> { durdur(); ana.postDelayed({ dinle() }, 45000) }  // güç tuşuyla açıldı: mikrofonu uygulamaya bırak
+      "duraklat" -> mikrofonuBirak()  // güç tuşuyla açıldı: mikrofonu uygulamaya bırak
     }
     return START_STICKY
   }
 
   override fun onCreate() {
     super.onCreate()
+    calisiyor = true
     bildirim("Ses modeli hazırlanıyor…")
     File(filesDir, "uyandirma_acik").writeText("1")  // yeniden başlatma/güncelleme sonrası hatırlatmak için
+    UyandirmaAlici.bekciKur(this)
+    istekGozcu = object : FileObserver(filesDir.path, CLOSE_WRITE) {
+      override fun onEvent(olay: Int, ad: String?) { if (ad == "mikrofon_istegi") ana.post { mikrofonuBirak() } }
+    }.also { it.startWatching() }
     varyantYukle()
     Thread { hazirla() }.start()
+  }
+
+  // Mikrofonu uygulamaya bırakır; uygulama kayıt yaparken veya konuşurken geri almaz
+  private fun mikrofonuBirak() {
+    durdur()
+    ana.removeCallbacks(geriAl)
+    ana.postDelayed(geriAl, 15000)
+  }
+
+  private val geriAl: Runnable = object : Runnable {
+    override fun run() {
+      val ses = getSystemService(AudioManager::class.java)
+      val istek = File(filesDir, "mikrofon_istegi")
+      val yeniIstek = istek.exists() && System.currentTimeMillis() - istek.lastModified() < 15000
+      if (ses.activeRecordingConfigurations.isNotEmpty() || ses.isMusicActive || yeniIstek) ana.postDelayed(this, 5000)
+      else dinle()
+    }
+  }
+
+  // Bazı telefonlar uygulama son kullanılanlardan kaydırılınca servisi de kapatıyor: birkaç saniye sonra yeniden açılır
+  override fun onTaskRemoved(rootIntent: Intent?) {
+    UyandirmaAlici.yenidenBaslat(this, 3000)
+    super.onTaskRemoved(rootIntent)
   }
 
   private fun bildirim(metin: String) {
@@ -117,48 +154,74 @@ class UyandirmaServisi : Service(), RecognitionListener {
     else startForeground(41, n)
   }
 
-  private fun zipAc(kaynak: InputStream) {
+  private fun zipAc(kaynak: InputStream, klasor: File) {
     ZipInputStream(kaynak).use { zip ->
       var g = zip.nextEntry
       while (g != null) {
-        val hedef = File(filesDir, g.name)
-        if (!hedef.canonicalPath.startsWith(filesDir.canonicalPath)) throw SecurityException("zip yolu")
+        val hedef = File(klasor, g.name)
+        if (!hedef.canonicalPath.startsWith(klasor.canonicalPath)) throw SecurityException("zip yolu")
         if (g.isDirectory) hedef.mkdirs() else { hedef.parentFile?.mkdirs(); hedef.outputStream().use { zip.copyTo(it) } }
         g = zip.nextEntry
       }
     }
   }
 
-  private fun hazirla() {
+  // Kurulu mu: işaret dosyası; eski sürümlerin işaretsiz açtığı tam model (son dosyası varsa) de kabul edilir
+  private fun kurulu(klasor: File, sonDosya: String): Boolean {
+    if (File(klasor, KURULDU).exists()) return true
+    if (File(klasor, sonDosya).exists()) { File(klasor, KURULDU).writeText("1"); return true }
+    return false
+  }
+
+  // Zip geçici klasöre açılır, tamamlanınca yerine taşınır: yarıda kalırsa kurulu model bozulmaz
+  private fun kur(zip: File, ad: String) {
+    val gecici = File(filesDir, "acilis.tmp")
+    gecici.deleteRecursively(); gecici.mkdirs()
+    try {
+      zip.inputStream().use { zipAc(it, gecici) }
+      val hedef = File(filesDir, ad)
+      hedef.deleteRecursively()
+      if (!File(gecici, ad).renameTo(hedef)) throw java.io.IOException("model taşınamadı")
+      File(hedef, KURULDU).writeText("1")
+      zip.delete()
+    } catch (e: Exception) {
+      zip.delete()  // bozuk/yarım zip: bir sonraki denemede yeniden iner
+      throw e
+    } finally { gecici.deleteRecursively() }
+  }
+
+  // Uygulama modeli HP'den indiriyorsa (".indiriliyor" dosyası taze) bekler; yoksa internetten dosyaya indirir
+  private fun indir(adres: String, zip: File) {
+    val uygulamaninki = File(zip.path + ".indiriliyor")
+    if (uygulamaninki.exists() && System.currentTimeMillis() - uygulamaninki.lastModified() < 120000) {
+      throw java.io.IOException("uygulama modeli indiriyor")
+    }
+    val gecici = File(zip.path + ".servis")
+    URL(adres).openStream().use { g -> gecici.outputStream().use { g.copyTo(it) } }
+    if (!gecici.renameTo(zip)) throw java.io.IOException("indirme taşınamadı")
+  }
+
+  private fun hazirla() = synchronized(kilit) {
     try {
       val klasor = File(filesDir, "${MODEL_KLASOR}")
-      if (!File(klasor, "conf").exists()) {
+      if (!kurulu(klasor, "word_boundary.int")) {
         ana.post { bildirim("Türkçe ses modeli hazırlanıyor (37 MB, bir kez)…") }
-        // önce uygulamanın HP'den indirdiği kopya (files/vosk-tr.zip), yoksa internetten
-        val yerel = File(filesDir, "vosk-tr.zip")
-        try {
-          zipAc(if (yerel.exists()) yerel.inputStream() else URL("${MODEL_URL}").openStream())
-        } catch (e: Exception) {  // bozuk/yarım zip: silinir ki bir sonraki denemede baştan inebilsin
-          yerel.delete(); klasor.deleteRecursively(); throw e
-        }
-        yerel.delete()
+        val zip = File(filesDir, "vosk-tr.zip")  // uygulama HP'den indirir; yoksa internetten
+        if (!zip.exists()) indir("${MODEL_URL}", zip)
+        kur(zip, "${MODEL_KLASOR}")
       }
-      model = Model(klasor.absolutePath)
+      if (model == null) model = Model(klasor.absolutePath)
       try {  // konuşmacı modeli (13 MB): yoksa sorun değil, sadece "sadece benim sesimle" çalışmaz
         val spk = File(filesDir, "vosk-model-spk-0.4")
-        if (!spk.exists() || spk.list()?.isEmpty() != false) {
-          val yerelSpk = File(filesDir, "vosk-spk.zip")
-          if (yerelSpk.exists()) {
-            try { zipAc(yerelSpk.inputStream()) } catch (e: Exception) { yerelSpk.delete(); spk.deleteRecursively(); throw e }
-            yerelSpk.delete()
-          }
-        }
-        if (spk.exists()) spkModel = SpeakerModel(spk.absolutePath)
+        val spkZip = File(filesDir, "vosk-spk.zip")
+        if (!kurulu(spk, "final.ext.raw") && spkZip.exists()) kur(spkZip, "vosk-model-spk-0.4")
+        if (spkModel == null && kurulu(spk, "final.ext.raw")) spkModel = SpeakerModel(spk.absolutePath)
       } catch (e: Exception) { Log.e("Tulpar", "konusmaci modeli", e) }
       ana.post { dinle() }
     } catch (e: Exception) {
       Log.e("Tulpar", "uyandirma modeli", e)
-      ana.post { bildirim("Ses modeli hazırlanamadı: " + e.message) }
+      ana.post { bildirim("Ses modeli hazırlanıyor, 1 dk sonra tekrar denenecek (" + e.message + ")") }
+      ana.postDelayed({ Thread { hazirla() }.start() }, 60000)
     }
   }
 
@@ -199,9 +262,8 @@ class UyandirmaServisi : Service(), RecognitionListener {
       Log.i("Tulpar", "uyandirma ses uzakligi: " + d)
       if (d > ESIK) return  // başka biri
     }
-    durdur()  // mikrofonu uygulamaya bırak
+    mikrofonuBirak()
     startActivity(Intent(this, AsistanActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    ana.postDelayed({ dinle() }, 45000)
   }
 
   override fun onPartialResult(h: String?) = kontrol(h, false)
@@ -210,7 +272,11 @@ class UyandirmaServisi : Service(), RecognitionListener {
   override fun onError(e: Exception?) { durdur(); ana.postDelayed({ dinle() }, 5000) }
   override fun onTimeout() { durdur(); dinle() }
 
-  override fun onDestroy() { ana.removeCallbacksAndMessages(null); durdur(); model?.close(); super.onDestroy() }
+  override fun onDestroy() {
+    calisiyor = false
+    istekGozcu?.stopWatching()
+    ana.removeCallbacksAndMessages(null); durdur(); model?.close(); super.onDestroy()
+  }
 }
 `;
 
@@ -220,26 +286,39 @@ import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 
-// Ayarlardaki anahtardan çağrılır: islem=ac | kapat. Gerekirse "diğer uygulamaların üzerinde göster" iznini ister
-// (Android, arka plandan uygulama açmak için bunu şart koşuyor).
+// Görünmez ekran. islem: ac (ayarlardan; gerekli izinleri ister) | otomatik (uygulama açılışı, telefon açılışı, bekçi;
+// izin sormaz) | kapat | ogren_basla | ogren_bitir | yukle.
+// Mikrofon servisi arka plandan başlatılamıyor; bu ekran görünür olduğu anda (onResume) başlatılır.
 class UyandirmaActivity : Activity() {
-  override fun onCreate(savedInstanceState: Bundle?) {
-    super.onCreate(savedInstanceState)
+  private var yapildi = false
+
+  override fun onResume() {
+    super.onResume()
+    if (yapildi) return
+    yapildi = true
     val servis = Intent(this, UyandirmaServisi::class.java)
     val islem = intent.getStringExtra("islem")
-    if (islem == "kapat") {
-      java.io.File(filesDir, "uyandirma_acik").delete()
-      stopService(servis)
-    } else if (islem == "ogren_basla" || islem == "ogren_bitir" || islem == "yukle") {
-      startForegroundService(servis.putExtra("ogren", islem.removePrefix("ogren_")))
-    } else {
-      if (!Settings.canDrawOverlays(this)) {
-        startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + packageName)))
+    try {
+      if (islem == "kapat") {
+        java.io.File(filesDir, "uyandirma_acik").delete()
+        stopService(servis)
+      } else if (islem == "ogren_basla" || islem == "ogren_bitir" || islem == "yukle") {
+        startForegroundService(servis.putExtra("ogren", islem.removePrefix("ogren_")))
+      } else {
+        if (islem != "otomatik") {
+          // Telefon açılınca/öldürülünce kendiliğinden başlayabilmek için iki izin: üstte gösterme ve pil kısıtlaması yok
+          if (!Settings.canDrawOverlays(this)) {
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + packageName)))
+          } else if (!getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)) {
+            startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + packageName)))
+          }
+        }
+        startForegroundService(servis)
       }
-      startForegroundService(servis)
-    }
+    } catch (e: Exception) { android.util.Log.e("Tulpar", "uyandirma ekrani", e) }
     finish()
   }
 }
@@ -247,6 +326,7 @@ class UyandirmaActivity : Activity() {
 
 const ALICI = (p) => `package ${p}
 
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -254,13 +334,42 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
+import android.provider.Settings
+import android.util.Log
 import java.io.File
 
-// Telefon yeniden açılınca veya uygulama güncellenince uyandırma servisi durur. Android, arka plandan mikrofon servisi
-// başlatmaya izin vermiyor; bu yüzden tek dokunuşluk bir bildirim gösterir (ve uygulama açılınca servis kendiliğinden başlar).
+// Uyandırmayı açık tutar: telefon açılınca, uygulama güncellenince, servis öldürülünce (kaydırma) ve 15 dakikada bir
+// (bekçi) servis çalışmıyorsa yeniden başlatır. Arka plandan mikrofon servisi başlatılamadığı için "üstte gösterme"
+// izniyle görünmez ekranı açar; izin yoksa tek dokunuşluk bildirim gösterir.
 class UyandirmaAlici : BroadcastReceiver() {
+  companion object {
+    const val KONTROL = "${p}.UYANDIRMA_KONTROL"
+
+    private fun bekleyen(c: Context, kod: Int) = PendingIntent.getBroadcast(c, kod,
+      Intent(c, UyandirmaAlici::class.java).setAction(KONTROL), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+
+    fun bekciKur(c: Context) {
+      c.getSystemService(AlarmManager::class.java).setInexactRepeating(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+        SystemClock.elapsedRealtime() + AlarmManager.INTERVAL_FIFTEEN_MINUTES, AlarmManager.INTERVAL_FIFTEEN_MINUTES, bekleyen(c, 7))
+    }
+
+    fun yenidenBaslat(c: Context, gecikmeMs: Long) {
+      c.getSystemService(AlarmManager::class.java).setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+        SystemClock.elapsedRealtime() + gecikmeMs, bekleyen(c, 8))
+    }
+  }
+
   override fun onReceive(c: Context, i: Intent) {
     if (!File(c.filesDir, "uyandirma_acik").exists()) return
+    if (i.action == KONTROL && UyandirmaServisi.calisiyor) return
+    if (Settings.canDrawOverlays(c)) {
+      try {
+        c.startActivity(Intent(c, UyandirmaActivity::class.java).putExtra("islem", "otomatik")
+          .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION))
+        return
+      } catch (e: Exception) { Log.e("Tulpar", "otomatik baslatma", e) }
+    }
     val nm = c.getSystemService(NotificationManager::class.java)
     nm.createNotificationChannel(NotificationChannel("uyandirma_hatirlat", "Uyandırma hatırlatma", NotificationManager.IMPORTANCE_DEFAULT))
     val ac = PendingIntent.getActivity(c, 1, Intent(c, UyandirmaActivity::class.java).putExtra("islem", "ac"),
@@ -294,7 +403,8 @@ module.exports = function uyandirma(config) {
     const m = c.modResults.manifest;
     m['uses-permission'] = m['uses-permission'] || [];
     for (const izin of ['android.permission.FOREGROUND_SERVICE', 'android.permission.FOREGROUND_SERVICE_MICROPHONE',
-      'android.permission.SYSTEM_ALERT_WINDOW', 'android.permission.RECORD_AUDIO', 'android.permission.RECEIVE_BOOT_COMPLETED']) {
+      'android.permission.SYSTEM_ALERT_WINDOW', 'android.permission.RECORD_AUDIO', 'android.permission.RECEIVE_BOOT_COMPLETED',
+      'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS']) {
       if (!m['uses-permission'].some((x) => x.$['android:name'] === izin)) m['uses-permission'].push({ $: { 'android:name': izin } });
     }
     const app = m.application[0];

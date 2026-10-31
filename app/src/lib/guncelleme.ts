@@ -37,16 +37,16 @@ export async function sesModeliniIndir(): Promise<void> {
   const makine = await sunucuMakinesi();
   if (!a || !makine) throw new Error('Sunucu ayarı yok');
   const port = a.adres.match(/:(\d+)/)?.[1] ?? '8090';
-  const indir = async (kurulu: string[], zip: string, yol: string) => {
-    if (new File(Paths.document, ...kurulu).exists) return;  // zaten kurulu
+  const indir = async (kurulu: string, zip: string, yol: string) => {
+    if (new File(Paths.document, kurulu, 'tulpar-kuruldu').exists) return;  // zaten kurulu (servis açınca yazar)
     const hedef = new File(Paths.document, zip);
-    if (hedef.exists) hedef.delete();  // yarım kalmış olabilir (zlib hatası): her seferinde baştan indir
+    if (hedef.exists) return;  // tam iniş bekliyor (yarım zip burada olamaz; bozuksa servis siler, sonra yeniden iner)
     // Geçici ada iner, bitince taşınır: indirme sürerken servis başlarsa yarım zip'i açmaya çalışmasın
     const gecici = new File(Paths.document, zip + '.indiriliyor');
     if (gecici.exists) gecici.delete();
     await File.downloadFileAsync(`http://${makine}:${port}${yol}`, gecici, { headers: { 'x-tulpar-anahtar': a.anahtar }, idempotent: true });
-    gecici.move(hedef);
+    await gecici.move(hedef);
   };
-  await indir(['vosk-model-small-tr-0.3', 'conf'], 'vosk-tr.zip', '/uygulama/vosk');
-  await indir(['vosk-model-spk-0.4'], 'vosk-spk.zip', '/uygulama/vosk-spk').catch(() => {});  // yoksa sadece "benim sesimle" çalışmaz
+  await indir('vosk-model-small-tr-0.3', 'vosk-tr.zip', '/uygulama/vosk');
+  await indir('vosk-model-spk-0.4', 'vosk-spk.zip', '/uygulama/vosk-spk').catch(() => {});  // yoksa sadece "benim sesimle" çalışmaz
 }

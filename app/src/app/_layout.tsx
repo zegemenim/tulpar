@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SecureStore from 'expo-secure-store';
 import { startActivityAsync } from 'expo-intent-launcher';
 import { ayarOku } from '../lib/api';
+import { sesModeliniIndir } from '../lib/guncelleme';
 import { bildirimleriBaslat } from '../lib/bildirim';
 import { useRenk } from '../lib/tema';
 
@@ -20,12 +21,13 @@ export default function Kok() {
       else {
         bildirimleriBaslat().catch(() => {});
         // Uyandırma ayarı açıksa servisi (yeniden) başlat: güncelleme/yeniden başlatma sonrası Android onu kapatır
-        SecureStore.getItemAsync('uyandirma').then((v) => {
-          if (v === 'evet') {
-            startActivityAsync('android.intent.action.MAIN', {
-              packageName: 'dev.tulpar.app', className: 'dev.tulpar.app.UyandirmaActivity', extra: { islem: 'ac' },
-            }).catch(() => {});
-          }
+        // (model telefonda yoksa önce HP'den iner; kuruluysa hiçbir şey indirmez)
+        SecureStore.getItemAsync('uyandirma').then(async (v) => {
+          if (v !== 'evet') return;
+          await sesModeliniIndir().catch(() => {});  // inemezse servis kendisi internetten dener
+          startActivityAsync('android.intent.action.MAIN', {
+            packageName: 'dev.tulpar.app', className: 'dev.tulpar.app.UyandirmaActivity', extra: { islem: 'otomatik' },
+          }).catch(() => {});
         });
       }
     });

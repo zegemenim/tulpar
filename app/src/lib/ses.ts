@@ -6,6 +6,7 @@ import * as Speech from 'expo-speech';
 import * as Haptics from 'expo-haptics';
 import * as SecureStore from 'expo-secure-store';
 import { konusAkis, sentezle, sesGonder } from './api';
+import { mikrofonuIste } from './dinleIstegi';
 
 export type Durum = 'bos' | 'dinliyor' | 'yaziya' | 'dusunuyor' | 'konusuyor';
 export type Konusma = { kim: 'ben' | 'tulpar'; metin: string; eylem?: { tur: string; id: number } | null };
@@ -145,6 +146,7 @@ export function useSesliAsistan(eklendi: (k: Konusma) => void, guncellendi?: (me
     sesliOkumaDurdur();
     const izin = await AudioModule.requestRecordingPermissionsAsync();
     if (!izin.granted) return setHata('Mikrofon izni yok');
+    await mikrofonuIste();
     await kayit.prepareToRecordAsync();
     kayit.record();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -204,6 +206,7 @@ export function useSesleYaz(metinGeldi: (metin: string) => void) {
     if (durumRef.current === 'bos') {
       const izin = await AudioModule.requestRecordingPermissionsAsync();
       if (!izin.granted) return setHata('Mikrofon izni yok');
+      await mikrofonuIste();
       await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
       await kayit.prepareToRecordAsync();
       kayit.record();

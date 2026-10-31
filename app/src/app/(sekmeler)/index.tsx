@@ -1,6 +1,6 @@
 // Ana ekran: Tulpar'la konuşma (sesli/yazılı), onay bekleyenler, bekleyen taslaklar, son önemli mesajlar.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AppState, KeyboardAvoidingView, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { Ionicons } from '@expo/vector-icons';
@@ -66,6 +66,10 @@ export default function AnaEkran() {
   }, []);
   useEffect(() => { dinlemeyiDene(); return dinlemeyeAbone(dinlemeyiDene); }, [dinlemeyiDene]);
   useFocusEffect(useCallback(() => { dinlemeyiDene(); }, [dinlemeyiDene]));
+  useEffect(() => {  // arka plandan öne gelince (asistan olarak açıldıysa istek dosyası bekliyor)
+    const abone = AppState.addEventListener('change', (d) => { if (d === 'active') dinlemeyiDene(); });
+    return () => abone.remove();
+  }, [dinlemeyiDene]);
 
   useEffect(() => { if (konusma.at(-1)?.eylem) yenile(); }, [konusma, yenile]);
 
@@ -117,7 +121,9 @@ export default function AnaEkran() {
         {konusma.map((k, i) => (
           <View key={i} style={[s.balon, k.kim === 'ben' ? { alignSelf: 'flex-end', backgroundColor: r.balonBen } : { alignSelf: 'flex-start', backgroundColor: r.kart }]}>
             <Text style={{ color: r.yazi, fontSize: 15 }}>{k.metin}</Text>
-            {k.eylem ? <Text style={{ color: r.ana, fontSize: 12, marginTop: 4 }}>{k.eylem.tur === 'gorev' ? '✓ görevlere eklendi' : k.eylem.tur === 'ekran' ? '🖥 ikinci ekran' : '⏳ onayına sunuldu'}</Text> : null}
+            {k.eylem ? <Text style={{ color: r.ana, fontSize: 12, marginTop: 4 }}>{k.eylem.tur === 'gorev' ? '✓ görevlere eklendi' : k.eylem.tur === 'ekran' ? '🖥 ikinci ekran'
+              : k.eylem.tur === 'arastirma' ? '🔎 araştırılıyor, bitince bildirim gelecek' : k.eylem.tur === 'arastirma_sonuc' ? '🔎 araştırma sonucu'
+              : '⏳ onayına sunuldu'}</Text> : null}
           </View>
         ))}
 

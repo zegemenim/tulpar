@@ -16,7 +16,9 @@ import android.os.Bundle
 class AsistanActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    // Uyandırma servisi mikrofonu tutuyorsa 45 sn bırakmasını iste (yoksa uygulamanın mikrofonu boş kalır)
+    // Uygulama kapalıysa tulpar://dinle bağlantısı açılışta kaybolabiliyor: istek dosyaya da yazılır, ana ekran okur
+    java.io.File(filesDir, "dinle_istegi").writeText(System.currentTimeMillis().toString())
+    // Uyandırma servisi mikrofonu tutuyorsa bırakmasını iste (yoksa uygulamanın mikrofonu boş kalır)
     if (java.io.File(filesDir, "uyandirma_acik").exists()) {
       startForegroundService(Intent(this, UyandirmaServisi::class.java).putExtra("ogren", "duraklat"))
     }
