@@ -166,6 +166,13 @@ def ele(m, toplu=None):
     # sadece görsel/çıkartma olan mesaja taslak yok: içeriğini göremiyoruz, körlemesine cevap uydurmayalım
     sadece_medya = bool(re.fullmatch(r"(\(sahibin mesajına cevap\) )?(@\S+ )*\[[^\]]+\]( @\S+)*", m["metin"].strip()))
     taslak_gerek = istiyor and not sadece_medya and sohbet_modu(m["sohbet_id"]) == "tam"  # taslak sadece TAM modda
+    tepki = (sonuc.get("tepki") or "").strip()
+    if (not taslak_gerek and not sonuc.get("guvenlik") and tepki and len(tepki) <= 8 and ihtimal >= 2 and ayarlar.al("cevap_seviyesi") >= 3
+            and sohbet_modu(m["sohbet_id"]) == "tam" and not db.oku("SELECT 1 FROM taslaklar WHERE durum='bekliyor' AND mesaj_idler LIKE ?", f'%"{m["id"]}"%')):
+        try:  # yüksek seviyede cevap vermeye değmeyen ama karşılık beklenen mesaja emoji tepkisi önerilir (yine onayla gider)
+            _tepki_taslagi_ac(m["id"], emoji=tepki)
+        except Exception as e:
+            log(f"otomatik tepki atlandi: {e}")
     with _kilit:
         d = _sohbet.setdefault(m["sohbet_id"], {"son": 0, "eleme": 0, "gelenler": [], "zamanlayici": False})
         d["eleme"] -= 1
@@ -320,7 +327,7 @@ def taslak_gonder(tid: int, govde: dict = Body(default={})):
     mesajlar = govde.get("mesajlar") or (secenekler[govde.get("secenek", 0)]["mesajlar"] if secenekler else [])
     if not mesajlar:
         raise HTTPException(400, "gönderilecek mesaj yok")
-    if any("[" in m["metin"] and "]" in m["metin"] for m in mesajlar):
+    if any("[" in m["metin"] and "]" in m["metin"] for m in mesajlar if not m.get("cikartma")):
         raise HTTPException(400, "taslakta doldurulmamış [boşluk] var")
     try:
         for m in mesajlar:
@@ -329,7 +336,7 @@ def taslak_gonder(tid: int, govde: dict = Body(default={})):
                 r = db.oku("SELECT id, gonderen_id, benden, metin FROM mesajlar WHERE id=?", m["yanit_id"])
                 alinti = r[0] if r else None
             istek = urllib.request.Request(KOPRU + "/gonder", data=json.dumps(
-                {"sohbet_id": t["sohbet_id"], "metin": m["metin"], "alinti": alinti, "tepki": m.get("tepki")},
+                {"sohbet_id": t["sohbet_id"], "metin": m["metin"], "alinti": alinti, "tepki": m.get("tepki"), "cikartma": m.get("cikartma")},
                 ensure_ascii=False).encode(),
                 headers={"Content-Type": "application/json", "x-tulpar-anahtar": ANAHTAR})
             urllib.request.urlopen(istek, timeout=60)
@@ -348,12 +355,29 @@ def taslak_gonder(tid: int, govde: dict = Body(default={})):
     return {"tamam": True}
 
 
-@app.post("/mesaj/{mid}/tepki", dependencies=[Depends(yetki)])
-def tepki_taslagi(mid: str, govde: dict = Body(...)):
-    """Bir mesaja emoji tepkisi için taslak açar. Gönderim yine onayla olur (taslaklardan)."""
-    emoji = (govde.get("emoji") or "").strip()
-    if not emoji or len(emoji) > 8:
-        raise HTTPException(400, "emoji gerekli")
+def _cikartmalar():
+    out = []
+    for f in sorted((VERI / "cikartmalar").glob("*.json")):
+        try:
+            out.append(json.loads(f.read_text()))
+        except (OSError, json.JSONDecodeError):
+            pass
+    return out
+
+
+@app.get("/cikartmalar", dependencies=[Depends(yetki)])
+def cikartma_listesi():
+    return _cikartmalar()
+
+
+@app.get("/cikartma/{sha}", dependencies=[Depends(yetki)])
+def cikartma_dosya(sha: str):
+    if not re.fullmatch(r"[0-9a-f]{6,64}", sha) or not (VERI / "cikartmalar" / f"{sha}.webp").exists():
+        raise HTTPException(404, "yok")
+    return FileResponse(VERI / "cikartmalar" / f"{sha}.webp", media_type="image/webp")
+
+
+def _tepki_taslagi_ac(mid, emoji=None, cikartma=None):
     r = db.oku("SELECT id, sohbet_id, sohbet_adi, gonderen_adi, metin FROM mesajlar WHERE id=?", mid)
     if not r:
         raise HTTPException(404, "mesaj yok")
@@ -363,11 +387,31 @@ def tepki_taslagi(mid: str, govde: dict = Body(...)):
             raise HTTPException(403, "bu sohbet kapalı")
     except FileNotFoundError:
         pass
-    ozet = f"Tepki: {emoji} → {m['gonderen_adi'] or m['sohbet_adi']}: {m['metin'][:60]}"
-    tid = db.taslak_ekle(m["sohbet_id"], m["sohbet_adi"], [mid], ozet,
-                         [{"etiket": f"Tepki {emoji}", "mesajlar": [{"yanit_id": mid, "metin": emoji, "tepki": emoji}]}], [])
-    log(f"tepki taslagi #{tid}: {emoji} -> {m['sohbet_adi']}")
-    return {"taslak": tid}
+    if cikartma:
+        etiket, oge = "Çıkartma", {"yanit_id": mid, "metin": "çıkartma", "cikartma": cikartma}
+    else:
+        etiket, oge = f"Tepki {emoji}", {"yanit_id": mid, "metin": emoji, "tepki": emoji}
+    ozet = f"{etiket} → {m['gonderen_adi'] or m['sohbet_adi']}: {m['metin'][:60]}"
+    tid = db.taslak_ekle(m["sohbet_id"], m["sohbet_adi"], [mid], ozet, [{"etiket": etiket, "mesajlar": [oge]}], [])
+    log(f"{etiket.lower()} taslagi #{tid}: {m['sohbet_adi']}")
+    return tid
+
+
+@app.post("/mesaj/{mid}/cikartma", dependencies=[Depends(yetki)])
+def cikartma_taslagi(mid: str, govde: dict = Body(...)):
+    sha = (govde.get("sha") or "").strip()
+    if not re.fullmatch(r"[0-9a-f]{6,64}", sha) or not (VERI / "cikartmalar" / f"{sha}.webp").exists():
+        raise HTTPException(400, "çıkartma yok")
+    return {"taslak": _tepki_taslagi_ac(mid, cikartma=sha)}
+
+
+@app.post("/mesaj/{mid}/tepki", dependencies=[Depends(yetki)])
+def tepki_taslagi(mid: str, govde: dict = Body(...)):
+    """Bir mesaja emoji tepkisi için taslak açar. Gönderim yine onayla olur (taslaklardan)."""
+    emoji = (govde.get("emoji") or "").strip()
+    if not emoji or len(emoji) > 8:
+        raise HTTPException(400, "emoji gerekli")
+    return {"taslak": _tepki_taslagi_ac(mid, emoji=emoji)}
 
 
 @app.post("/taslak/{tid}/reddet", dependencies=[Depends(yetki)])

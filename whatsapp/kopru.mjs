@@ -117,6 +117,23 @@ async function bekleyenGecmisiIsle() {
   log(`WhatsApp bekleyen gecmis islendi: ${satirlar.length} satir`);
 }
 
+// Sahibin gönderdiği çıkartmalar kütüphaneye alınır (kendi çıkartmaların; kimin gönderdiği çıkartma saklanmaz).
+// Yanında hangi mesaja cevap olarak atıldığı da tutulur: Tulpar uygun olanı bu bağlamdan seçer.
+const CIKARTMA = path.join(VERI, 'cikartmalar');
+const sonGelen = {};
+async function cikartmaKaydet(msg, jid) {
+  try {
+    const sha = Buffer.from(msg.message.stickerMessage.fileSha256 || []).toString('hex').slice(0, 24);
+    if (!sha) return;
+    fs.mkdirSync(CIKARTMA, { recursive: true, mode: 0o700 });
+    const dosya = path.join(CIKARTMA, sha + '.webp');
+    if (fs.existsSync(dosya)) return;
+    fs.writeFileSync(dosya, await downloadMediaMessage(msg, 'buffer', {}), { mode: 0o600 });
+    fs.writeFileSync(path.join(CIKARTMA, sha + '.json'), JSON.stringify({ sha, cevap_verilen: sonGelen[jid] || null }));
+    log(`WhatsApp cikartma kutuphaneye alindi (${sha.slice(0, 6)})`);
+  } catch (e) { log(`HATA cikartma kaydi: ${e.message}`); }
+}
+
 async function baglan() {
   const { state, saveCreds } = await useMultiFileAuthState(path.join(VERI, 'wa-oturum-baileys'));
   sock = makeWASocket({
@@ -185,6 +202,8 @@ async function baglan() {
             fs.writeFileSync(m.ses_dosyasi, await downloadMediaMessage(msg, 'buffer', {}), { mode: 0o600 });
           } catch (e) { log(`HATA ses indirme: ${e.message}`); delete m.ses_dosyasi; }
         }
+        if (m && getContentType(msg.message) === 'stickerMessage' && msg.key.fromMe) await cikartmaKaydet(msg, jid);
+        if (m && !m.benden && !m.metin.startsWith('[')) sonGelen[jid] = m.metin.slice(0, 120);
         if (m) await tulparaGonder(m);
       } catch (e) { log(`HATA mesaj isleme: ${e.message}`); }
     }
@@ -200,7 +219,7 @@ http.createServer((istek, yanit) => {
   istek.on('data', (p) => { govde += p; });
   istek.on('end', async () => {
     try {
-      const { sohbet_id, metin, alinti, tepki } = JSON.parse(govde);
+      const { sohbet_id, metin, alinti, tepki, cikartma } = JSON.parse(govde);
       if (haricMi(sohbet_id)) return bitir(403, { hata: 'hariç tutulan sohbet' });
       const anahtar = alinti?.id ? {  // tepki/alıntı hedefi: Tulpar'ın hafızasındaki bilgilerle
         remoteJid: sohbet_id, id: alinti.id, fromMe: !!alinti.benden,
@@ -211,6 +230,12 @@ http.createServer((istek, yanit) => {
         await sock.sendMessage(sohbet_id, { react: { text: tepki, key: anahtar } });
         log(`WhatsApp tepki (${tepki}): ${ad(sohbet_id)}`);
         return bitir(200, { tepki: true });
+      }
+      if (cikartma) {  // kütüphanedeki çıkartma (dosya adı sadece hex)
+        if (!/^[0-9a-f]{6,64}$/.test(cikartma)) return bitir(400, { hata: 'çıkartma kimliği' });
+        const sm = await sock.sendMessage(sohbet_id, { sticker: fs.readFileSync(path.join(CIKARTMA, cikartma + '.webp')) });
+        log(`WhatsApp cikartma gonderildi: ${ad(sohbet_id)}`);
+        return bitir(200, { id: sm?.key?.id });
       }
       const secenek = {};
       if (anahtar) secenek.quoted = { key: anahtar, message: { conversation: alinti.metin || '' } };
