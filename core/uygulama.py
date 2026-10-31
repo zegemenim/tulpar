@@ -298,16 +298,21 @@ def _taslak_yaz(kisi, talimat):
     kisi = (kisi or "").strip()
     if not kisi:
         return {"hata": "kimin için yazılacağı anlaşılmadı"}
-    r = db.oku("SELECT sohbet_id, sohbet_adi FROM mesajlar WHERE sohbet_adi LIKE ? ORDER BY zaman DESC LIMIT 1", f"%{kisi}%")
+    # aynı adı taşıyan birden çok kişi/sohbet olabilir (iki Burak, ya da grupta yazan Burak): kendisinden en son mesaj geleni seç
+    r = db.oku("""SELECT sohbet_id, sohbet_adi, gonderen_adi, grup FROM mesajlar WHERE benden=0 AND (sohbet_adi LIKE ? OR gonderen_adi LIKE ?)
+                  ORDER BY zaman DESC LIMIT 1""", f"%{kisi}%", f"%{kisi}%")
     if not r:
-        return {"hata": f"'{kisi}' adlı sohbet bulunamadı"}
+        return {"hata": f"'{kisi}' adlı kişi veya sohbet bulunamadı"}
     sid, ad = r[0]["sohbet_id"], r[0]["sohbet_adi"]
+    if r[0]["grup"]:
+        ad = f"{ad} (grup), {r[0]['gonderen_adi']}'e cevap"
     try:
         if sid in set(json.loads((VERI / "haric.json").read_text()).get("sohbetler", [])):
             return {"hata": "bu sohbet kapalı, yazamam"}
     except FileNotFoundError:
         pass
-    gelen = [m for m in db.son_mesajlar(sid, 8) if not m["benden"]][-3:] or db.son_mesajlar(sid, 1)
+    kimden = r[0]["gonderen_adi"] if r[0]["grup"] else None  # grupta: sadece o kişinin son mesajlarına cevap
+    gelen = [m for m in db.son_mesajlar(sid, 40) if not m["benden"] and (not kimden or m["gonderen_adi"] == kimden)][-3:] or db.son_mesajlar(sid, 1)
     for t in db.taslaklar("bekliyor"):
         if t["sohbet_id"] == sid:
             db.taslak_durum(t["id"], "reddedildi")  # eski taslak yerine yenisi (ders sayılmaz)
@@ -371,11 +376,12 @@ def _arac_uygula(metin, dogrudan=False, gecmis=None, sid=None):
                                    "yazılacak ve bildirim gelecek. Bunu tek cümleyle söyle; cevabı tahmin etme, uydurma.")
         return arac, {"tur": "arastirma", "id": sid or 0}, sistem
     elif arac == "whatsapp_taslak":
-        sonuc = _taslak_yaz(p.get("kisi"), p.get("metin") or metin)
+        sonuc = _taslak_yaz(p.get("kisi"), metin)  # sahibin tüm sözü: araç parametresi bilgiyi kısaltabiliyor
         if sonuc.get("tid"):
             eylem = {"tur": "taslak", "id": sonuc["tid"]}
-            ek = (f"\nAz önce {sonuc['ad']} için WhatsApp taslağı hazırladın: \"{sonuc['metin']}\". "
-                  "Taslağı kısaca söyle ve onayını iste; göndermek için uygulamada Taslaklar'dan onaylaması gerektiğini belirt. Gönderildi DEME.")
+            ek = (f"\nAz önce \"{sonuc['ad']}\" için WhatsApp taslağı hazırladın (henüz GÖNDERİLMEDİ): \"{sonuc['metin']}\". "
+                  "Cevabına şu cümleyle başla: 'Taslağı hazırladım, onayını bekliyor:' ve ardından taslağı kısaca tekrar et. "
+                  "'Gönderdim' veya 'iletildi' DEME.")
         else:
             ek = f"\nTaslak hazırlanamadı: {sonuc['hata']}. Bunu sahibine kısaca söyle."
     elif arac == "sor" and p.get("soru"):

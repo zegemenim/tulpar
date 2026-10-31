@@ -125,4 +125,6 @@ def hazirla(kuyruk, sohbet_id, sohbet_adi, gelenler, talimat=None):
         if secenekler and not any("uygunsuz" in u for u in uyarilar):
             break
         istem += ("\n\nÖNCEKİ TASLAK REDDEDİLDİ: " + uyarilar[0] + ". Bu kelimeleri kullanma.") if uyarilar else ""
+    if talimat:  # sözlü talimat: tek seçenek, tek mesaj
+        secenekler = [{"etiket": "Talimatına göre", "mesajlar": secenekler[0]["mesajlar"]}] if secenekler else secenekler
     return db.taslak_ekle(sohbet_id, sohbet_adi, [m["id"] for m in gelenler], cevap.get("ozet"), secenekler, uyarilar)
