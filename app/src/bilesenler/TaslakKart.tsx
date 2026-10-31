@@ -1,6 +1,7 @@
 // Bir taslak: hangi mesajlara cevap, özet, uyarılar ve seçenekler. Gönderim her zaman ayrıca onay ister.
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import SesliGirdi from './SesliGirdi';
 import { istek, saat, Taslak, TaslakMesaj } from '../lib/api';
 import { useRenk } from '../lib/tema';
 
@@ -10,6 +11,8 @@ export default function TaslakKart({ t, bitti }: { t: Taslak; bitti: () => void 
   const [duzenle, setDuzenle] = useState(false);
   const [metin, setMetin] = useState('');
   const [mesgul, setMesgul] = useState(false);
+  const [redPaneli, setRedPaneli] = useState(false);
+  const [neden, setNeden] = useState('');
   const gelenler = t.gelenler ?? [];
   const alinti = (id: string | null) => gelenler.find((g) => g.id === id);
   const uyarilar = t.uyarilar.filter((u): u is string => typeof u === 'string');
@@ -26,7 +29,7 @@ export default function TaslakKart({ t, bitti }: { t: Taslak; bitti: () => void 
         text: 'Gönder', onPress: async () => {
           setMesgul(true);
           try {
-            await istek(`/taslak/${t.id}/gonder`, mesajlar ? { mesajlar } : { secenek: secili });
+            await istek(`/taslak/${t.id}/gonder`, mesajlar ? { mesajlar, neden: neden.trim() || null } : { secenek: secili });
             bitti();
           } catch (e: any) {
             Alert.alert('Gönderilemedi', e.message);
@@ -38,8 +41,9 @@ export default function TaslakKart({ t, bitti }: { t: Taslak; bitti: () => void 
     ]);
   };
 
+  // Reddedince sebebi sorulur (isteğe bağlı, yazarak veya sesle); Tulpar sonraki taslaklarda bundan ders alır
   const reddet = async () => {
-    await istek(`/taslak/${t.id}/reddet`, {});
+    await istek(`/taslak/${t.id}/reddet`, { neden: neden.trim() || null });
     bitti();
   };
 
@@ -103,14 +107,29 @@ export default function TaslakKart({ t, bitti }: { t: Taslak; bitti: () => void 
       })}
 
       {duzenle && (
-        <TextInput multiline autoFocus value={metin} onChangeText={setMetin}
-          placeholder="Her satır ayrı mesaj olarak gider"
-          placeholderTextColor={r.soluk}
-          style={[s.girdi, { color: r.yazi, borderColor: r.cizgi, backgroundColor: r.zemin }]} />
+        <View style={{ gap: 8 }}>
+          <SesliGirdi multiline autoFocus value={metin} onChangeText={setMetin} placeholder="Her satır ayrı mesaj olarak gider" />
+          <SesliGirdi value={neden} onChangeText={setNeden} placeholder="Neden değiştirdin? (isteğe bağlı, Tulpar öğrenir)" />
+        </View>
+      )}
+
+      {redPaneli && (
+        <View style={[s.panel, { borderColor: r.cizgi, backgroundColor: r.zemin }]}>
+          <Text style={{ color: r.yazi, fontWeight: '600', marginBottom: 6 }}>Neden uygun değil? (isteğe bağlı)</Text>
+          <SesliGirdi value={neden} onChangeText={setNeden} placeholder="örn. hocaya böyle yazılmaz, cevap gerekmiyordu" />
+          <View style={[s.butonlar, { marginTop: 8 }]}>
+            <Pressable onPress={() => setRedPaneli(false)} style={[s.buton, { borderColor: r.cizgi }]}>
+              <Text style={{ color: r.yazi }}>Vazgeç</Text>
+            </Pressable>
+            <Pressable onPress={reddet} style={[s.buton, s.ana, { backgroundColor: r.kirmizi }]}>
+              <Text style={{ color: '#fff', fontWeight: '700' }}>✕ Reddet</Text>
+            </Pressable>
+          </View>
+        </View>
       )}
 
       <View style={s.butonlar}>
-        <Pressable onPress={reddet} style={[s.buton, { borderColor: r.cizgi }]}>
+        <Pressable onPress={() => { setRedPaneli(true); setDuzenle(false); }} style={[s.buton, { borderColor: r.cizgi }]}>
           <Text style={{ color: r.kirmizi, fontWeight: '600' }}>✕ Reddet</Text>
         </Pressable>
         <Pressable onPress={() => { setDuzenle(!duzenle); setMetin((sec?.mesajlar ?? []).map((m) => m.metin).join('\n')); }}
@@ -136,8 +155,8 @@ const s = StyleSheet.create({
   cip: { borderWidth: 1.5, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 6 },
   giden: { borderRadius: 10, padding: 8, marginBottom: 4, alignSelf: 'flex-end', maxWidth: '92%' },
   alinti: { borderLeftWidth: 3, borderRadius: 6, padding: 6, marginBottom: 4 },
-  girdi: { borderWidth: 1, borderRadius: 10, padding: 10, minHeight: 80, textAlignVertical: 'top' },
   butonlar: { flexDirection: 'row', gap: 8, marginTop: 10 },
   buton: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
   ana: { borderWidth: 0 },
+  panel: { borderWidth: 1, borderRadius: 10, padding: 10, marginTop: 10 },
 });

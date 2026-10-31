@@ -21,9 +21,11 @@
       "permissions": [
         "RECORD_AUDIO",
         "POST_NOTIFICATIONS",
-        "INTERNET"
+        "INTERNET",
+        "REQUEST_INSTALL_PACKAGES"
       ],
-      "softwareKeyboardLayoutMode": "resize"
+      "softwareKeyboardLayoutMode": "resize",
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/favicon.png"

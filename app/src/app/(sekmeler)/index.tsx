@@ -4,6 +4,7 @@ import { KeyboardAvoidingView, Pressable, RefreshControl, ScrollView, StyleSheet
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { Ionicons } from '@expo/vector-icons';
+import GuncellemeSeridi from '../../bilesenler/GuncellemeSeridi';
 import OnayKart from '../../bilesenler/OnayKart';
 import { Ana, istek, saat } from '../../lib/api';
 import { yokla } from '../../lib/bildirim';
@@ -69,6 +70,7 @@ export default function AnaEkran() {
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: r.zemin }} behavior="height">
       <ScrollView contentContainerStyle={s.icerik}
         refreshControl={<RefreshControl refreshing={yukleniyor} onRefresh={yenile} />}>
+        <GuncellemeSeridi />
         {hata ? <Text style={[s.hata, { color: r.kirmizi }]}>Sunucuya ulaşılamadı: {hata}</Text> : null}
 
         {ana && ana.taslak_sayisi > 0 && (

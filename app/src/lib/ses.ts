@@ -105,3 +105,40 @@ export const durumYazisi: Record<Durum, string> = {
   bos: 'Konuşmak için bas', dinliyor: 'Dinliyorum… bitirince bırak / bas', yaziya: 'Yazıya döküyorum…',
   dusunuyor: 'Düşünüyorum…', konusuyor: 'Konuşuyorum (susturmak için bas)',
 };
+
+/** Bir yazı alanını sesle doldurmak için: bas-konuş-bas, söylenen metin alana gelir (HP'de Whisper). */
+export function useSesleYaz(metinGeldi: (metin: string) => void) {
+  const kayit = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const [durum, setDurum] = useState<'bos' | 'dinliyor' | 'yaziya'>('bos');
+  const durumRef = useRef(durum);
+  const ayarla = (d: typeof durum) => { durumRef.current = d; setDurum(d); };
+  const [hata, setHata] = useState<string | null>(null);
+
+  const dokun = useCallback(async () => {
+    setHata(null);
+    if (durumRef.current === 'bos') {
+      const izin = await AudioModule.requestRecordingPermissionsAsync();
+      if (!izin.granted) return setHata('Mikrofon izni yok');
+      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
+      await kayit.prepareToRecordAsync();
+      kayit.record();
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      ayarla('dinliyor');
+    } else if (durumRef.current === 'dinliyor') {
+      await kayit.stop();
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      if (!kayit.uri) return ayarla('bos');
+      ayarla('yaziya');
+      try {
+        const metin = (await sesGonder(kayit.uri)).trim();
+        if (metin) metinGeldi(metin); else setHata('Anlaşılamadı, tekrar dener misin?');
+      } catch (e: any) {
+        setHata(e.message);
+      } finally {
+        ayarla('bos');
+      }
+    }
+  }, [kayit, metinGeldi]);
+
+  return { durum, hata, dokun };
+}

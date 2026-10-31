@@ -57,10 +57,20 @@ async function getir(a: Ayar, yol: string, init: RequestInit, zamanAsimi: number
   throw sonHata instanceof Error ? sonHata : new Error('Sunucuya ulaşılamadı');
 }
 
+/** Bağlantı koparsa (ör. sunucu yeniden başlarken) 3 sn sonra bir kez daha dener. */
+async function getirTekrarli(a: Ayar, yol: string, init: RequestInit, zamanAsimi: number, getirici?: (u: string, i: any) => Promise<any>): Promise<Response> {
+  try {
+    const y = await getir(a, yol, init, zamanAsimi, getirici);
+    if (y.status < 500) return y;
+  } catch {}
+  await new Promise((r) => setTimeout(r, 3000));
+  return getir(a, yol, init, zamanAsimi, getirici);
+}
+
 export async function istek<T = any>(yol: string, govde?: unknown, zamanAsimi = 200000): Promise<T> {
   const a = await ayarOku();
   if (!a) throw new Error('Sunucu ayarı yok');
-  const y = await getir(a, yol, {
+  const y = await getirTekrarli(a, yol, {
     method: govde === undefined ? 'GET' : 'POST',
     headers: { 'Content-Type': 'application/json', 'x-tulpar-anahtar': a.anahtar },
     body: govde === undefined ? undefined : JSON.stringify(govde),
@@ -102,12 +112,12 @@ export async function sesGonder(uri: string): Promise<string> {
   const a = await ayarOku();
   if (!a) throw new Error('Sunucu ayarı yok');
   const veri = await new File(uri).bytes();
-  const y = await getir(a, '/ses', {
+  const y = await getirTekrarli(a, '/ses', {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream', 'x-tulpar-anahtar': a.anahtar },
     body: veri,
   }, 200000);
-  if (!y.ok) throw new Error(`ses ${y.status}`);
+  if (!y.ok) throw new Error(y.status >= 500 ? 'Sunucu yeniden başlıyor olabilir, birazdan tekrar dene.' : `ses ${y.status}`);
   return (await y.json()).metin as string;
 }
 

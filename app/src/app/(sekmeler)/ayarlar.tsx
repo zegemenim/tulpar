@@ -1,9 +1,10 @@
 // Ayarlar: sunucu bağlantısı, açılışta dinleme, reddedilen onaylar (7 gün saklanır), asistan kurulumu.
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import OnayKart from '../../bilesenler/OnayKart';
+import { denetle, indirVeKur, mevcutSurum } from '../../lib/guncelleme';
 import { ayarOku, istek, Onay } from '../../lib/api';
 import { useRenk } from '../../lib/tema';
 
@@ -36,6 +37,19 @@ export default function Ayarlar() {
         <Text style={{ color: durum.startsWith('Bağlı') ? r.yesil : r.kirmizi, marginTop: 4 }}>{durum}</Text>
         <Pressable onPress={() => router.push('/kurulum')} style={{ marginTop: 8 }}>
           <Text style={{ color: r.ana, fontWeight: '600' }}>Adresi veya anahtarı değiştir</Text>
+        </Pressable>
+      </View>
+
+      <View style={kart}>
+        <Text style={[s.bas, { color: r.yazi }]}>Uygulama sürümü: {mevcutSurum()}</Text>
+        <Pressable onPress={async () => {
+          try {
+            const y = await denetle();
+            if (!y) return Alert.alert('Güncel', 'En son sürümü kullanıyorsun.');
+            await indirVeKur();
+          } catch (e: any) { Alert.alert('Güncellenemedi', e.message); }
+        }}>
+          <Text style={{ color: r.ana, fontWeight: '600', marginTop: 4 }}>Güncellemeleri denetle</Text>
         </Pressable>
       </View>
 
