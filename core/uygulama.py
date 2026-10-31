@@ -15,6 +15,7 @@ import db
 import llm
 import sahip
 import ses
+import tarayici
 import tts
 from kuyruk import Is, log
 
@@ -238,10 +239,33 @@ ADIM_KURALI = (
 )
 
 
-def _arac_uygula(metin, dogrudan=False, gecmis=None):
+def _arastir(soru, sid):
+    """Araştırmayı arka planda yapar; sonucu sohbete Tulpar mesajı olarak yazar (bildirim /bildirimler'den gider)."""
+    def model_sor(sistem, icerik):
+        return _baglam["kuyruk"].ekle(Is("komut", sistem, icerik, json_cevap=False)).bekle(900)  # sahibi istedi: acil
+    try:
+        sayfalar = tarayici.ara(soru)
+        metin = tarayici.ozetle(soru, sayfalar, model_sor) if sayfalar else ""
+        metin = metin or "Araştırdım ama soruya cevap veren okunabilir bir kaynak bulamadım."
+    except tarayici.BotKorumasi:
+        metin = "Arama sitesi bot koruması (CAPTCHA) çıkardı, şimdilik araştıramadım. Biraz sonra tekrar deneyebilirim."
+    except Exception as e:
+        log(f"arastirma hatasi: {type(e).__name__}: {e}")
+        metin = "Araştırma yarıda kaldı, bir hata oldu. Tekrar denememi istersen söyle."
+    if not sid or not db.oku("SELECT id FROM asistan_sohbet WHERE id=?", sid):
+        sid = db.yaz("INSERT INTO asistan_sohbet (baslik, olusturma, guncel) VALUES (?,?,?)",
+                     f"Araştırma: {soru[:50]}", time.time(), time.time())
+    db.yaz("INSERT INTO asistan_mesaj (sohbet_id, rol, metin, eylem, zaman) VALUES (?,?,?,?,?)", sid, "tulpar", metin,
+           json.dumps({"tur": "arastirma_sonuc", "id": sid}), time.time())
+    db.yaz("UPDATE asistan_sohbet SET guncel=? WHERE id=?", time.time(), sid)
+    log(f"arastirma bitti #{sid}: {soru[:50]}")
+
+
+def _arac_uygula(metin, dogrudan=False, gecmis=None, sid=None):
     """Önce hangi aracın gerektiğine karar verir ve uygular; cevap için sistem istemini hazırlar.
     dogrudan: kuyruğu beklemeden modele sor (anlık sesli konuşma için; model paralel istek işleyebiliyor).
-    gecmis: sohbetin önceki mesajları; çok adımlı işlerde (eksik bilgiyi sorma, onay) bağlam."""
+    gecmis: sohbetin önceki mesajları; çok adımlı işlerde (eksik bilgiyi sorma, onay) bağlam.
+    sid: konuşmanın sohbeti; arka plan işlerinin (araştırma) sonucu buraya yazılır."""
     k, bugun = _baglam["kuyruk"], _baglam["bugun"]()
     istem = _baglam["istem"]["system_tool"].replace("{bugun}", bugun) + ADIM_KURALI
     if dogrudan:
@@ -266,6 +290,12 @@ def _arac_uygula(metin, dogrudan=False, gecmis=None):
     elif arac == "claude_code":
         oid = onay_ekle("claude_gorev", f"İş: {p.get('gorev_tanimi') or metin}"[:200], metin)
         eylem = {"tur": "onay", "id": oid}
+    elif arac == "arastirma":
+        soru = (p.get("soru") or metin).strip()
+        threading.Thread(target=_arastir, args=(soru, sid), daemon=True).start()
+        sistem = _sistem(bugun) + ("\nAz önce web'de araştırma başlattın: " + soru + ". Sonuç birkaç dakika içinde bu sohbete "
+                                   "yazılacak ve bildirim gelecek. Bunu tek cümleyle söyle; cevabı tahmin etme, uydurma.")
+        return arac, {"tur": "arastirma", "id": sid or 0}, sistem
     elif arac == "sor" and p.get("soru"):
         ek = f"\nİşi yapmak için eksik bilgi var. Sahibine SADECE şunu sor: {p['soru']}"
     elif arac == "onay_iste" and p.get("ozet"):
@@ -358,7 +388,7 @@ def konus_akis(govde: dict = Body(...)):
         cevap, arac, eylem = [], "yok", None
         with _baglam["kuyruk"].canli():
             if devam or ISTEK_IPUCU.search(metin):  # bir iş isteniyor veya süren iş: önce araç kararı
-                arac, eylem, sistem = _arac_uygula(metin, dogrudan=True, gecmis=gecmis[-8:])
+                arac, eylem, sistem = _arac_uygula(metin, dogrudan=True, gecmis=gecmis[-8:], sid=sid)
             else:  # sohbet/soru: araç kararını atla, hemen cevaba geç
                 sistem = _sistem(_baglam["bugun"]())
             yield json.dumps({"tur": "eylem", "eylem": eylem, "arac": arac}, ensure_ascii=False) + "\n"
@@ -402,7 +432,9 @@ def bildirimler(sonra: float = 0):
         y["eleme"] = json.loads(y["eleme"])
     taslak = db.oku("SELECT id, sohbet_adi, ozet, olusturma FROM taslaklar WHERE durum='bekliyor' AND olusturma>?", sonra)
     onay = db.oku("SELECT id, baslik, olusturma FROM onaylar WHERE durum='bekliyor' AND olusturma>?", sonra)
-    return {"zaman": time.time(), "onemli": yeni, "taslaklar": taslak, "onaylar": onay}
+    arastirma = db.oku("""SELECT m.sohbet_id, s.baslik, m.metin FROM asistan_mesaj m JOIN asistan_sohbet s ON s.id=m.sohbet_id
+                          WHERE m.rol='tulpar' AND m.eylem LIKE '%arastirma_sonuc%' AND m.zaman>? ORDER BY m.zaman""", sonra)
+    return {"zaman": time.time(), "onemli": yeni, "taslaklar": taslak, "onaylar": onay, "arastirmalar": arastirma}
 
 
 # ---------- telefondan terminal ----------
