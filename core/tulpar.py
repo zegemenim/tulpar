@@ -150,6 +150,11 @@ def ele(m, toplu=None):
         log(f"BILDIRIM: {kaynak[:40]}: {sonuc.get('ozet') or m['metin'][:80]}")
     istiyor = sonuc.get("aksiyon") == "cevap_taslagi" or (
         sonuc.get("tur") == "soru" and not m.get("grup") and sonuc.get("aksiyon") != "yok")
+    # cevap seviyesi: modelin "sahibi normalde cevaplar mı" puanı (0-10) eşiğe göre; sahibe doğrudan yazılanlar her seviyede geçer
+    dogrudan = bool(sonuc.get("kime") == "sahip" or "(sahibin mesajına cevap)" in m["metin"] or not m.get("grup"))
+    ihtimal = sonuc.get("cevap_ihtimali")
+    ihtimal = ihtimal if isinstance(ihtimal, (int, float)) else (6 if istiyor else 0)
+    istiyor = (istiyor and dogrudan) or ihtimal >= {1: 8, 2: 5, 3: 3}[ayarlar.al("cevap_seviyesi")]
     bana = m.get("grup") and (sonuc.get("kime") == "sahip" or "(sahibin mesajına cevap)" in m["metin"])
     if bana and sohbet_modu(m["sohbet_id"]) == "onemli" and not sonuc.get("guvenlik"):
         # ÖNEMLİ grupta doğrudan sahibe yazılan: haber ver ve "taslak hazırlayayım mı?" diye sor

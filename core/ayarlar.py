@@ -15,6 +15,10 @@ SEMA = {
                            "Birebir sohbette art arda gelenler bu kadar sessizlikten sonra birlikte değerlendirilir.", 20, 0, 300),
     "taslak_bekleme_sn": ("WhatsApp", "Taslak bekleme süresi (sn)",
                           "Kişi bu kadar susunca cevap taslağı hazırlanır (art arda mesajlar tek taslakta).", 90, 10, 900),
+    "cevap_seviyesi": ("WhatsApp", "Cevap verme seviyesi (1-3)",
+                       "Tulpar hangi mesajlara cevap taslağı hazırlasın? 1 = düşük: sadece sana yazılanlar ve senin kesin cevap vereceğin şeyler; "
+                       "2 = orta: normalde cevap vereceğin çoğu şey; 3 = yüksek: normalde cevap vereceğin her şey (gruplar ve arkadaş sohbetleri dahil).",
+                       2, 1, 3),
     "baglam_mesaj": ("WhatsApp", "Değerlendirmede bağlam (mesaj)",
                      "Bir mesaj değerlendirilirken o sohbetin son kaç mesajı bağlam olarak okunur.", 15, 3, 60),
     "sohbet_gecmis_mesaj": ("Konuşma", "Sohbette hatırlanan mesaj",
