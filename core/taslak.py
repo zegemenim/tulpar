@@ -87,7 +87,7 @@ def dersler(sohbet_id):
             + "\n".join(satirlar) + "\n\n")
 
 
-def hazirla(kuyruk, sohbet_id, sohbet_adi, gelenler):
+def hazirla(kuyruk, sohbet_id, sohbet_adi, gelenler, talimat=None):
     """gelenler: cevaplanacak mesaj satırları (db.mesajlar). Taslak id'si döner."""
     gecmis = db.son_mesajlar(sohbet_id, 40)
     kart = kart_getir(kuyruk, sohbet_id, sohbet_adi, gecmis)
@@ -102,6 +102,9 @@ def hazirla(kuyruk, sohbet_id, sohbet_adi, gelenler):
              "CEVAPLANACAK MESAJ(LAR) — SADECE bunlara cevap ver, sohbetteki başka konulara değil:\n"
              + "\n".join(f"[{m['id']}] {m.get('gonderen_adi') or sohbet_adi}: {m['metin']}" for m in gelenler) + "\n"
              f"Bugün: {time.strftime('%Y-%m-%d %A %H:%M')}")
+    if talimat:
+        istem += ("\n\nSAHİBİNİN TALİMATI: " + talimat + "\nCevabı bu talimata göre, sahibin üslubuyla yaz. Talimatta olmayan bilgi, söz veya plan UYDURMA. "
+                  "Tek seçenek yeter.")
     gecerli = {m["id"] for m in gecmis}
     for deneme in range(2):
         cevap = kuyruk.ekle(Is("taslak", TASLAK_SISTEM, istem)).bekle() or {}

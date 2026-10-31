@@ -122,7 +122,7 @@ export default function AnaEkran() {
           <View key={i} style={[s.balon, k.kim === 'ben' ? { alignSelf: 'flex-end', backgroundColor: r.balonBen } : { alignSelf: 'flex-start', backgroundColor: r.kart }]}>
             <Text style={{ color: r.yazi, fontSize: 15 }}>{k.metin}</Text>
             {k.eylem ? <Text style={{ color: r.ana, fontSize: 12, marginTop: 4 }}>{k.eylem.tur === 'gorev' ? '✓ görevlere eklendi' : k.eylem.tur === 'ekran' ? '🖥 ikinci ekran'
-              : k.eylem.tur === 'arastirma' ? '🔎 araştırılıyor, bitince bildirim gelecek' : k.eylem.tur === 'arastirma_sonuc' ? '🔎 araştırma sonucu'
+              : k.eylem.tur === 'taslak' ? '✉ taslak hazır, Taslaklar sekmesinden onayla' : k.eylem.tur === 'arastirma' ? '🔎 araştırılıyor, bitince bildirim gelecek' : k.eylem.tur === 'arastirma_sonuc' ? '🔎 araştırma sonucu'
               : '⏳ onayına sunuldu'}</Text> : null}
           </View>
         ))}

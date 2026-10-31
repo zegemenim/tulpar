@@ -15,6 +15,7 @@ import db
 import llm
 import sahip
 import ses
+import taslak
 import tarayici
 import tts
 from kuyruk import Is, log
@@ -255,7 +256,7 @@ def _durum_ozeti():
 
 # Bu kelimeler geçiyorsa bir iş isteniyor olabilir; geçmiyorsa sohbet sayılır ve araç kararı atlanır (hız için)
 ISTEK_IPUCU = re.compile(r"(?i)\b(ekle|kaydet|hatırlat|hatirlat|takvim|randevu|alarm|kur|aç|ac|kapat|başlat|durdur|araştır|arastir|"
-                         r"bul|ara\b|özetle|ozetle|yaz|gönder|gonder|taslak|kod|site|proje|düzelt|duzelt|ekran|görev|gorev)")
+                         r"bul|ara\b|özetle|ozetle|yaz|gönder|gonder|taslak|söyle|soyle|cevap|mesaj|kod|site|proje|düzelt|duzelt|ekran|görev|gorev)")
 
 
 # Araç kararına eklenen kurallar: eksik bilgiyi sor, eklemeden önce özetleyip onay al (çok adımlı konuşma)
@@ -289,6 +290,34 @@ def _arastir(soru, sid):
            json.dumps({"tur": "arastirma_sonuc", "id": sid}), time.time())
     db.yaz("UPDATE asistan_sohbet SET guncel=? WHERE id=?", time.time(), sid)
     log(f"arastirma bitti #{sid}: {soru[:50]}")
+
+
+def _taslak_yaz(kisi, talimat):
+    """Sahibinin sözlü talimatından bir sohbete taslak yazar. O sohbette bekleyen taslak varsa onun yerine geçer (düzeltme).
+    Kapalı (hariç) sohbete yazılmaz. Gönderim yine uygulamadan onayla olur."""
+    kisi = (kisi or "").strip()
+    if not kisi:
+        return {"hata": "kimin için yazılacağı anlaşılmadı"}
+    r = db.oku("SELECT sohbet_id, sohbet_adi FROM mesajlar WHERE sohbet_adi LIKE ? ORDER BY zaman DESC LIMIT 1", f"%{kisi}%")
+    if not r:
+        return {"hata": f"'{kisi}' adlı sohbet bulunamadı"}
+    sid, ad = r[0]["sohbet_id"], r[0]["sohbet_adi"]
+    try:
+        if sid in set(json.loads((VERI / "haric.json").read_text()).get("sohbetler", [])):
+            return {"hata": "bu sohbet kapalı, yazamam"}
+    except FileNotFoundError:
+        pass
+    gelen = [m for m in db.son_mesajlar(sid, 8) if not m["benden"]][-3:] or db.son_mesajlar(sid, 1)
+    for t in db.taslaklar("bekliyor"):
+        if t["sohbet_id"] == sid:
+            db.taslak_durum(t["id"], "reddedildi")  # eski taslak yerine yenisi (ders sayılmaz)
+    tid = taslak.hazirla(_baglam["kuyruk"], sid, ad, gelen, talimat=talimat)
+    yeni = next((t for t in db.taslaklar("bekliyor") if t["id"] == tid), None)
+    if not yeni or not yeni["mesajlar"]:
+        return {"hata": "taslak üretilemedi"}
+    metin = " / ".join(m["metin"] for m in yeni["mesajlar"][0]["mesajlar"])
+    log(f"sesli talimatla taslak #{tid}: {ad}")
+    return {"tid": tid, "ad": ad, "metin": metin}
 
 
 def arastirma_toparla():
@@ -341,6 +370,14 @@ def _arac_uygula(metin, dogrudan=False, gecmis=None, sid=None):
         sistem = _sistem(bugun) + ("\nAz önce web'de araştırma başlattın: " + soru + ". Sonuç birkaç dakika içinde bu sohbete "
                                    "yazılacak ve bildirim gelecek. Bunu tek cümleyle söyle; cevabı tahmin etme, uydurma.")
         return arac, {"tur": "arastirma", "id": sid or 0}, sistem
+    elif arac == "whatsapp_taslak":
+        sonuc = _taslak_yaz(p.get("kisi"), p.get("metin") or metin)
+        if sonuc.get("tid"):
+            eylem = {"tur": "taslak", "id": sonuc["tid"]}
+            ek = (f"\nAz önce {sonuc['ad']} için WhatsApp taslağı hazırladın: \"{sonuc['metin']}\". "
+                  "Taslağı kısaca söyle ve onayını iste; göndermek için uygulamada Taslaklar'dan onaylaması gerektiğini belirt. Gönderildi DEME.")
+        else:
+            ek = f"\nTaslak hazırlanamadı: {sonuc['hata']}. Bunu sahibine kısaca söyle."
     elif arac == "sor" and p.get("soru"):
         ek = f"\nİşi yapmak için eksik bilgi var. Sahibine SADECE şunu sor: {p['soru']}"
     elif arac == "onay_iste" and p.get("ozet"):
