@@ -44,6 +44,17 @@ CREATE TABLE IF NOT EXISTS gorevler (
   durum TEXT DEFAULT 'acik',     -- acik | bitti
   kaynak TEXT, olusturma REAL
 );
+CREATE TABLE IF NOT EXISTS asistan_sohbet (   -- sahibinin Tulpar'la sohbetleri (Claude/Gemini sohbetleri gibi)
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  baslik TEXT, ozet TEXT,                       -- ozet: uzun sohbette eski kısmın özeti
+  olusturma REAL, guncel REAL
+);
+CREATE TABLE IF NOT EXISTS asistan_mesaj (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  sohbet_id INTEGER, rol TEXT,                  -- ben | tulpar
+  metin TEXT, eylem TEXT, zaman REAL
+);
+CREATE INDEX IF NOT EXISTS asistan_mesaj_sohbet ON asistan_mesaj(sohbet_id, id);
 CREATE TABLE IF NOT EXISTS geri_bildirim (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   taslak_id INTEGER, sohbet_id TEXT,

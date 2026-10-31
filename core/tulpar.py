@@ -65,16 +65,59 @@ app.include_router(uygulama.router, dependencies=[Depends(yetki)])
 uygulama.bagla(kuyruk, ISTEM, bugun, lambda m: taslak.hazirla(kuyruk, m["sohbet_id"], m.get("sohbet_adi"), [m]))
 
 
-def ele(m):
-    """Bir mesajı değerlendir; sonucu kaydet ve gerekiyorsa taslak sırasına koy."""
+GRUP_TOPLAMA_SN = 60  # grupta art arda gelenler bu kadar sessizlikten sonra tek seferde değerlendirilir
+_grup = {}  # sohbet_id -> {"mesajlar": [...], "son": zaman, "zamanlayici": bool}
+
+
+def grup_bekle(m):
+    """Grup mesajını hemen değil, grup susunca toplu değerlendirmek üzere biriktir."""
+    with _kilit:
+        g = _grup.setdefault(m["sohbet_id"], {"mesajlar": [], "son": 0, "zamanlayici": False})
+        g["mesajlar"].append(m)
+        g["son"] = time.time()
+        if g["zamanlayici"]:
+            return
+        g["zamanlayici"] = True
+    threading.Timer(GRUP_TOPLAMA_SN, grup_ele, args=(m["sohbet_id"],)).start()
+
+
+def grup_ele(sohbet_id):
+    with _kilit:
+        g = _grup[sohbet_id]
+        kalan = GRUP_TOPLAMA_SN - (time.time() - g["son"])
+        if kalan > 0:
+            threading.Timer(kalan + 1, grup_ele, args=(sohbet_id,)).start()
+            return
+        mesajlar, g["mesajlar"], g["zamanlayici"] = g["mesajlar"], [], False
+    if not mesajlar:
+        return
+    temsilci = mesajlar[-1]
+    for x in mesajlar[:-1]:  # tek tek model çalıştırma: hepsi temsilcinin değerlendirmesinde birlikte okunur
+        db.eleme_kaydet(x["id"], kurallar.uygula({"onem": "dusuk", "aksiyon": "yok", "toplu": temsilci["id"]},
+                                                  x["metin"], True))
+        with _kilit:
+            _sohbet[sohbet_id]["eleme"] -= 1
+    log(f"grup toplu degerlendiriliyor: {temsilci.get('sohbet_adi', '?')[:30]} ({len(mesajlar)} mesaj, tek is)")
+    ele(temsilci, toplu=mesajlar)
+
+
+def ele(m, toplu=None):
+    """Bir mesajı değerlendir; sonucu kaydet ve gerekiyorsa taslak sırasına koy.
+    toplu: grupta art arda gelen mesajlar; hepsi tek seferde okunur, sonuç son mesaja (m) yazılır."""
     kaynak = m.get("sohbet_adi") or m.get("gonderen_adi") or "?"
     if m.get("grup"):
         kaynak = f"{kaynak} (grup), yazan: {m.get('gonderen_adi')}"
     sistem = ISTEM["system_triage"].replace("{bugun}", bugun())
-    onceki = [x for x in db.son_mesajlar(m["sohbet_id"], 16) if x["id"] != m["id"]][-15:]
+    yeni = {x["id"] for x in (toplu or [m])}
+    onceki = [x for x in db.son_mesajlar(m["sohbet_id"], 16 + len(yeni)) if x["id"] not in yeni][-15:]
     baglam = "\n".join(f"{sahip.AD if x['benden'] else x.get('gonderen_adi') or '?'}: {x['metin'][:200]}" for x in onceki)
+    if toplu and len(toplu) > 1:
+        degerlendir = ("Değerlendirilecek mesajlar (art arda geldi; HEPSİNİ birlikte değerlendir, en önemli olana göre karar ver):\n"
+                       + "\n".join(f"{x.get('gonderen_adi') or '?'}: {x['metin'][:300]}" for x in toplu))
+    else:
+        degerlendir = f"Değerlendirilecek mesaj: {m['metin']}"
     istem = (f"Kaynak: {kaynak}\n" + (f"Önceki mesajlar (sadece bağlam, değerlendirme):\n{baglam}\n" if baglam else "")
-             + f"Değerlendirilecek mesaj: {m['metin']}")
+             + degerlendir)
     is_ = kuyruk.ekle(Is("eleme", sistem, istem))
     is_.bekle()
     if is_.hata or not isinstance(is_.sonuc, dict) or "onem" not in is_.sonuc:
@@ -89,7 +132,7 @@ def ele(m):
             threading.Timer(120, ele, args=(m,)).start()
         return
     sonuc = is_.sonuc
-    sonuc = kurallar.uygula(sonuc, m["metin"], bool(m.get("grup")))
+    sonuc = kurallar.uygula(sonuc, "\n".join(x["metin"] for x in (toplu or [m])), bool(m.get("grup")))
     db.eleme_kaydet(m["id"], sonuc)
     try:
         uygulama.elemeden_onay(m, sonuc)
@@ -175,7 +218,6 @@ def baslangic():
            time.time() - 86400)
     threading.Thread(target=yarim_kalanlari_al, daemon=True).start()
     threading.Thread(target=uygulama.isit, daemon=True).start()
-    threading.Thread(target=ses.isit, daemon=True).start()
 
 
 @app.post("/mesaj", dependencies=[Depends(yetki)])
@@ -196,7 +238,12 @@ def mesaj(m: dict = Body(...)):
             d["son"] = time.time()
             d["eleme"] += 1
     if not m.get("benden"):
-        threading.Thread(target=sesliyse_dok_sonra_ele if m.get("ses_dosyasi") else ele, args=(m,), daemon=True).start()
+        if m.get("ses_dosyasi"):
+            threading.Thread(target=sesliyse_dok_sonra_ele, args=(m,), daemon=True).start()
+        elif m.get("grup") and not kurallar.guvenlik_kontrol(m["metin"]):
+            grup_bekle(m)  # grup: susunca toplu (güvenlik kuralına takılan mesaj beklemeden tek başına)
+        else:
+            threading.Thread(target=ele, args=(m,), daemon=True).start()
     return {"tamam": True}
 
 

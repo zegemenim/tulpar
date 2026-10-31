@@ -31,11 +31,23 @@ def _yukle():
                               download_root=str(MODEL_YOL))
 
 
-def isit():
-    """Servis açılırken modeli belleğe yükle: ilk sesli komut beklemesin."""
-    with _kilit:
-        _yukle()
-    log("whisper yuklendi")
+BOSTA_BIRAK_SN = 120  # Gemma ile birlikte 16 GB'a sığmıyor: kullanılmayınca bellekten at
+_son_kullanim = 0.0
+
+
+def _bosta_birak():
+    global _model
+    while True:
+        time.sleep(30)
+        with _kilit:
+            if _model is not None and time.time() - _son_kullanim > BOSTA_BIRAK_SN:
+                _model = None
+                import gc
+                gc.collect()
+                log("whisper bellekten birakildi (bosta)")
+
+
+threading.Thread(target=_bosta_birak, daemon=True).start()
 
 
 def yaziya_dok(dosya):
@@ -44,6 +56,8 @@ def yaziya_dok(dosya):
         t0 = time.time()
         # Türkçe ağırlıklı ama arada İngilizce terim geçen konuşma: dili Türkçe sabitle, ipucuyla İngilizce
         # kelimeleri olduğu gibi yazmaya yönlendir ("deploy" -> "diplay" olmasın)
+        global _son_kullanim
+        _son_kullanim = time.time()
         parcalar, bilgi = _model.transcribe(_coz(dosya), language="tr", vad_filter=True, initial_prompt=IPUCU)
         metin = " ".join(p.text.strip() for p in parcalar).strip()
     log(f"sesli mesaj yaziya dokuldu: {bilgi.duration:.0f} sn ses, {time.time() - t0:.0f} sn surdu")

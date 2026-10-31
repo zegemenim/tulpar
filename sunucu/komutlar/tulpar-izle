@@ -2,7 +2,21 @@
 # Tulpar canlı izleme ekranı: üstte sistem durumu, altta olay akışı.
 # Olaylar: logger -t tulpar "mesaj"  (servisler bu etiketle yazar)
 
-HEADER=6
+HEADER=7
+
+# Süreç başına gerçek bellek: RAM'de duran (Rss) ve diske taşan (Swap), MB
+pbellek() { awk '/^Rss:/{r=$2} /^Swap:/{s=$2} END{printf "%.1f GB", r/1048576; if (s>102400) printf " (+%.1f GB swap!)", s/1048576}' "/proc/$1/smaps_rollup" 2>/dev/null; }
+bellek() {
+  local m w u sw bos
+  m=$(pgrep -x llama-server | head -1); u=$(pgrep -f "uvicorn tulpar:app" | head -1)
+  sw=$(free -m | awk '/Swap:/{printf "%.1f", $3/1024}')
+  # "kullanılabilir" Gemma'nın RAM'deki dosya parçalarını da sayar; onlar atılırsa model diskten okumaya başlar.
+  # Gerçekten boş = kullanılabilir − Gemma'nın RAM'deki dosya parçaları
+  local gdosya=0; [ -n "$m" ] && gdosya=$(awk '/^Pss_File:/{print $2}' "/proc/$m/smaps_rollup" 2>/dev/null)
+  bos=$(free -k | awk -v g="${gdosya:-0}" '/Mem:/{v=($7-g)/1048576; printf "%.1f", (v<0?0:v)}')
+  printf "Bellek: Gemma %s · Tulpar+Whisper %s · swap %s GB · gerçekten boş %s GB" \
+    "$( [ -n "$m" ] && pbellek "$m" || echo kapalı)" "$( [ -n "$u" ] && pbellek "$u" || echo -)" "$sw" "$bos"
+}
 cleanup() { printf '\033[r\033[?25h'; clear; kill "$FEED" 2>/dev/null; exit 0; }
 trap cleanup INT TERM EXIT
 
@@ -40,6 +54,7 @@ draw() {
   printf '\033[2K Sıcaklık: %b%s°C\033[0m   CPU: %b%%%s\033[0m   RAM: %b%%%s\033[0m (%s/%s MB, model önbelleği %s MB)\n' \
     "$(color "$t" 70 85)" "$t" "$(color "$c" 60 90)" "$c" "$(color "$mem" 75 90)" "$mem" "$used" "$tot" "$cache"
   printf '\033[2K Disk: %s   Wi-Fi: %s   Model: %b\n' "$disk" "${wifi:-?}" "$model"
+  printf '\033[2K %s\n' "$(bellek)"
   printf '\033[2K \033[90m%s\033[0m\n' "${dl:-}"
   printf '\033[2K\033[90m%*s\033[0m\n' "$cols" '' | tr ' ' '-'
   printf '\033[2K\n\0338'

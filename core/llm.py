@@ -40,14 +40,17 @@ def kapat(model):
     subprocess.run(["sudo", "systemctl", "stop", MODELLER[model][1]], check=False)
 
 
-def akis(model, sistem, kullanici, json_cevap=False, dusunme=None, durdur=None):
+def akis(model, sistem, kullanici, json_cevap=False, dusunme=None, durdur=None, gecmis=None):
     """Modelin cevabını üretildikçe parça parça verir (anlık okuma/gösterme için).
-    durdur: threading.Event; set edilirse iş kesilir ve Iptal fırlatılır."""
+    durdur: threading.Event; set edilirse iş kesilir ve Iptal fırlatılır.
+    gecmis: [(rol, metin)] — rol 'user' | 'assistant'; sohbetin önceki mesajları (bağlam)."""
     kw = {"enable_thinking": False}
     if dusunme:
         kw["reasoning_effort"] = dusunme
     govde = {
-        "messages": [{"role": "system", "content": sistem}, {"role": "user", "content": kullanici}],
+        "messages": [{"role": "system", "content": sistem}]
+                    + [{"role": r, "content": m} for r, m in (gecmis or [])]
+                    + [{"role": "user", "content": kullanici}],
         "temperature": 0.3,
         "stream": True,
         "chat_template_kwargs": kw,
@@ -71,9 +74,9 @@ def akis(model, sistem, kullanici, json_cevap=False, dusunme=None, durdur=None):
         baglanti.close()
 
 
-def sor(model, sistem, kullanici, json_cevap=True, dusunme=None, durdur=None):
+def sor(model, sistem, kullanici, json_cevap=True, dusunme=None, durdur=None, gecmis=None):
     """Modelden cevabın tamamını al. dusunme: None | 'low' | 'medium' | 'high' (sadece düşünen modeller)."""
-    metin = "".join(akis(model, sistem, kullanici, json_cevap, dusunme, durdur))
+    metin = "".join(akis(model, sistem, kullanici, json_cevap, dusunme, durdur, gecmis))
     if not json_cevap:
         return metin
     try:

@@ -218,17 +218,36 @@ ISTEK_IPUCU = re.compile(r"(?i)\b(ekle|kaydet|hatırlat|hatirlat|takvim|randevu|
                          r"bul|ara\b|özetle|ozetle|yaz|gönder|gonder|taslak|kod|site|proje|düzelt|duzelt|ekran|görev|gorev)")
 
 
-def _arac_uygula(metin, dogrudan=False):
+# Araç kararına eklenen kurallar: eksik bilgiyi sor, eklemeden önce özetleyip onay al (çok adımlı konuşma)
+ADIM_KURALI = (
+    "\nÇOK ADIMLI KONUŞMA: Önceki mesajlar aynı konuşmanın parçası; sahibinin son mesajı önceki soruna cevap olabilir "
+    "(örn. sen 'saat kaçta?' dedin, o 'akşam 7' dedi). takvim_ekle için baslik, tarih ve saat GEREKLİ; yer bilinmiyorsa bir kez sor. "
+    "Gerekli bilgi eksikse arac='sor' ve parametreler={\"soru\": \"tek kısa soru\"}. "
+    "Hepsi tamamsa ama sahibi henüz onaylamadıysa arac='onay_iste' ve parametreler={\"ozet\": \"... ekleyeyim mi?\"}. "
+    "Sahibi son mesajında özeti onayladıysa (evet, ekle, tamam, olur) gerçek aracı (takvim_ekle) tüm parametrelerle döndür. "
+    "Sahibi 'boş ver', 'iptal' dediyse arac='yok'."
+)
+
+
+def _arac_uygula(metin, dogrudan=False, gecmis=None):
     """Önce hangi aracın gerektiğine karar verir ve uygular; cevap için sistem istemini hazırlar.
-    dogrudan: kuyruğu beklemeden modele sor (anlık sesli konuşma için; model paralel istek işleyebiliyor)."""
+    dogrudan: kuyruğu beklemeden modele sor (anlık sesli konuşma için; model paralel istek işleyebiliyor).
+    gecmis: sohbetin önceki mesajları; çok adımlı işlerde (eksik bilgiyi sorma, onay) bağlam."""
     k, bugun = _baglam["kuyruk"], _baglam["bugun"]()
-    istem = _baglam["istem"]["system_tool"].replace("{bugun}", bugun)
-    karar = (llm.sor("hizli", istem, metin) if dogrudan else k.ekle(Is("komut", istem, metin)).bekle(180)) or {}
+    istem = _baglam["istem"]["system_tool"].replace("{bugun}", bugun) + ADIM_KURALI
+    if dogrudan:
+        karar = llm.sor("hizli", istem, metin, gecmis=gecmis)
+    else:
+        karar = k.ekle(Is("komut", istem, metin)).bekle(180)
+    karar = karar or {}
     arac, p = karar.get("arac", "yok"), karar.get("parametreler") or {}
-    eylem = None
+    eylem, ek = None, ""
     if arac in ("takvim_ekle", "hatirlatici"):
         zaman = " ".join(x for x in (p.get("tarih"), p.get("saat")) if x) or p.get("zaman")
-        gid = gorev_ekle({"metin": p.get("baslik") or p.get("metin") or metin, "zaman": zaman, "kaynak": "konuşma"})["id"]
+        baslik = p.get("baslik") or p.get("metin") or metin
+        if p.get("yer"):
+            baslik += f" ({p['yer']})"
+        gid = gorev_ekle({"metin": baslik, "zaman": zaman, "kaynak": "konuşma"})["id"]
         eylem = {"tur": "gorev", "id": gid}
     elif arac == "ikinci_ekran":
         islem = "kapat" if str(p.get("durum", "")).lower().startswith("kap") else "ac"
@@ -238,10 +257,14 @@ def _arac_uygula(metin, dogrudan=False):
     elif arac == "claude_code":
         oid = onay_ekle("claude_gorev", f"İş: {p.get('gorev_tanimi') or metin}"[:200], metin)
         eylem = {"tur": "onay", "id": oid}
+    elif arac == "sor" and p.get("soru"):
+        ek = f"\nİşi yapmak için eksik bilgi var. Sahibine SADECE şunu sor: {p['soru']}"
+    elif arac == "onay_iste" and p.get("ozet"):
+        ek = f"\nBilgiler tamam. Sahibine kısaca özetleyip onay iste: {p['ozet']}"
     sistem = SOHBET_SISTEM.replace("{bugun}", bugun).replace("{durum}", _durum_ozeti())
     if eylem:
-        sistem += f"\nAz önce şunu yaptın: {arac} {json.dumps(p, ensure_ascii=False)}. Bunu kısaca söyle."
-    return arac, eylem, sistem
+        ek = f"\nAz önce şunu yaptın: {arac} {json.dumps(p, ensure_ascii=False)}. Bunu kısaca söyle."
+    return arac, eylem, sistem + ek
 
 
 @router.post("/konus")
@@ -255,30 +278,94 @@ def konus(govde: dict = Body(...)):
     return {"cevap": cevap.strip(), "eylem": eylem, "arac": arac}
 
 
+# ---------- sohbetler (Claude/Gemini'deki gibi; geri dönülebilir) ----------
+
+GECMIS_MESAJ = 16  # modele verilen son mesaj sayısı; daha eskisi özetle temsil edilir
+
+
+def _sohbet_gecmisi(sid):
+    satirlar = db.oku("SELECT rol, metin FROM asistan_mesaj WHERE sohbet_id=? ORDER BY id DESC LIMIT ?", sid, GECMIS_MESAJ)
+    ozet = (db.oku("SELECT ozet FROM asistan_sohbet WHERE id=?", sid) or [{}])[0].get("ozet")
+    gecmis = [("user" if r["rol"] == "ben" else "assistant", r["metin"]) for r in reversed(satirlar)]
+    if ozet:
+        gecmis = [("user", f"(Bu sohbetin önceki kısmının özeti: {ozet})"), ("assistant", "Tamam, hatırlıyorum.")] + gecmis
+    return gecmis
+
+
+def _ozetle_gerekirse(sid):
+    """Sohbet uzayınca eski mesajları kısa bir özete çevirir (model yavaşlamasın, konu kaybolmasın)."""
+    n = db.oku("SELECT COUNT(*) n FROM asistan_mesaj WHERE sohbet_id=?", sid)[0]["n"]
+    if n <= GECMIS_MESAJ + 8 or n % 8:
+        return
+    eski = db.oku("SELECT rol, metin FROM asistan_mesaj WHERE sohbet_id=? ORDER BY id LIMIT ?", sid, n - GECMIS_MESAJ)
+    onceki = (db.oku("SELECT ozet FROM asistan_sohbet WHERE id=?", sid) or [{}])[0].get("ozet") or ""
+    metin = (f"Önceki özet: {onceki}\n" if onceki else "") + "\n".join(
+        f"{'Sahibi' if m['rol'] == 'ben' else 'Tulpar'}: {m['metin']}" for m in eski)
+    ozet = llm.sor("hizli", "Bu sohbeti 3-5 cümlede özetle; kararları, tarihleri, isimleri ve yarım kalan işleri koru.",
+                   metin[-12000:], json_cevap=False)
+    db.yaz("UPDATE asistan_sohbet SET ozet=? WHERE id=?", ozet.strip(), sid)
+
+
+@router.get("/asistan/sohbetler")
+def asistan_sohbetler():
+    return db.oku("""SELECT s.id, s.baslik, s.guncel,
+                       (SELECT metin FROM asistan_mesaj m WHERE m.sohbet_id=s.id ORDER BY id DESC LIMIT 1) son
+                     FROM asistan_sohbet s ORDER BY s.guncel DESC LIMIT 100""")
+
+
+@router.get("/asistan/sohbet/{sid}")
+def asistan_sohbet(sid: int):
+    mesajlar = db.oku("SELECT id, rol, metin, eylem, zaman FROM asistan_mesaj WHERE sohbet_id=? ORDER BY id", sid)
+    for m in mesajlar:
+        m["eylem"] = json.loads(m["eylem"]) if m["eylem"] else None
+    return {"sohbet": (db.oku("SELECT * FROM asistan_sohbet WHERE id=?", sid) or [None])[0], "mesajlar": mesajlar}
+
+
+@router.post("/asistan/sohbet/{sid}/sil")
+def asistan_sohbet_sil(sid: int):
+    db.yaz("DELETE FROM asistan_mesaj WHERE sohbet_id=?", sid)
+    db.yaz("DELETE FROM asistan_sohbet WHERE id=?", sid)
+    return {"tamam": True}
+
+
 @router.post("/konus-akis")
 def konus_akis(govde: dict = Body(...)):
     """Anlık konuşma: cevap üretildikçe satır satır JSON olarak akar (uygulama hemen göstermeye/okumaya başlar).
-    Cevap kuyruğu beklemeden doğrudan modele gider; model aynı anda birden çok isteği işleyebiliyor."""
+    sohbet_id verilirse o sohbete devam eder (geçmişi hatırlar), verilmezse yeni sohbet açılır."""
     metin = (govde.get("metin") or "").strip()
     if not metin:
         raise HTTPException(400, "metin boş")
+    sid = govde.get("sohbet_id")
+    simdi = time.time()
+    if not sid or not db.oku("SELECT id FROM asistan_sohbet WHERE id=?", sid):
+        sid = db.yaz("INSERT INTO asistan_sohbet (baslik, olusturma, guncel) VALUES (?,?,?)", metin[:60], simdi, simdi)
+    gecmis = _sohbet_gecmisi(sid)
+    db.yaz("INSERT INTO asistan_mesaj (sohbet_id, rol, metin, zaman) VALUES (?,?,?,?)", sid, "ben", metin, simdi)
+    # Tulpar son mesajında bir şey sorduysa bu mesaj o işin devamıdır: araç kararını atlama
+    devam = bool(gecmis) and gecmis[-1][0] == "assistant" and gecmis[-1][1].rstrip().endswith("?")
 
     def uret():
-        yield json.dumps({"tur": "basladi"}) + "\n"  # bağlantı kuruldu: uygulama bu adresin çalıştığını hemen anlasın
+        yield json.dumps({"tur": "basladi", "sohbet_id": sid}) + "\n"
+        cevap, arac, eylem = [], "yok", None
         with _baglam["kuyruk"].canli():
-            if ISTEK_IPUCU.search(metin):  # bir iş isteniyor olabilir: önce araç kararı
-                arac, eylem, sistem = _arac_uygula(metin, dogrudan=True)
+            if devam or ISTEK_IPUCU.search(metin):  # bir iş isteniyor veya süren iş: önce araç kararı
+                arac, eylem, sistem = _arac_uygula(metin, dogrudan=True, gecmis=gecmis[-8:])
             else:  # sohbet/soru: araç kararını atla, hemen cevaba geç
-                arac, eylem = "yok", None
                 sistem = SOHBET_SISTEM.replace("{bugun}", _baglam["bugun"]()).replace("{durum}", _durum_ozeti())
             yield json.dumps({"tur": "eylem", "eylem": eylem, "arac": arac}, ensure_ascii=False) + "\n"
             try:
-                for parca in llm.akis("hizli", sistem, metin):
+                for parca in llm.akis("hizli", sistem, metin, gecmis=gecmis):
+                    cevap.append(parca)
                     yield json.dumps({"tur": "parca", "metin": parca}, ensure_ascii=False) + "\n"
             except Exception as e:
                 yield json.dumps({"tur": "hata", "metin": str(e)}, ensure_ascii=False) + "\n"
-        log(f"konusma (akis): {metin[:50]} -> {arac}")
-        yield json.dumps({"tur": "son"}) + "\n"
+        tum = "".join(cevap).strip()
+        db.yaz("INSERT INTO asistan_mesaj (sohbet_id, rol, metin, eylem, zaman) VALUES (?,?,?,?,?)", sid, "tulpar",
+               tum, json.dumps(eylem) if eylem else None, time.time())
+        db.yaz("UPDATE asistan_sohbet SET guncel=? WHERE id=?", time.time(), sid)
+        threading.Thread(target=_ozetle_gerekirse, args=(sid,), daemon=True).start()
+        log(f"konusma (akis) #{sid}: {metin[:50]} -> {arac}")
+        yield json.dumps({"tur": "son", "soru": tum.endswith("?")}) + "\n"
 
     return StreamingResponse(uret(), media_type="application/x-ndjson")
 

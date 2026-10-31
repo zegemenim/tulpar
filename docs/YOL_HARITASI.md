@@ -36,6 +36,13 @@ Sahibinin istekleri ve kararları. Biten işler işaretlenir; yenileri eklendik�
 - Sesli okuma sadece telefonun sesi açıkken
 - Uzak ekran (isteğe bağlı; terminal öncelikli)
 
+## Telefon asistanı (planlanan)
+- Normal aramalara Android uygulama erişimi yok; yol: SIP numarası (ör. Netgsm) HP'ye bağlanır
+- Giden arama: "dişçiyi ara, randevu al" → Tulpar arar, sonucu bildirir
+- Gelen: cevapsız/meşgulde operatör yönlendirmesi SIP numarasına → Tulpar karşılar, ne istendiğini öğrenir, "bağlayayım mı?" diye sorar, onayla aktarır
+- Modlar: sekreter / sahibinin üslubu — her ikisinde de başta asistan olduğunu söyler; kayıt varsa bildirilir (KVKK)
+- Sınır: bu işlemcide yanıt ~5-10 sn; akıcı görüşme için ekran kartı gerekir
+
 ## Notlar
 - Donanım: RAM yükseltmesi ileride (2×32 GB DDR4-3200 SO-DIMM, Çin'den yolcu beraberinde en uygun)
 - Repo şimdilik private; kişisel bilgiler `~/tulpar/veri/sahip.json` içinde, repoda yok
