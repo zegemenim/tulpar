@@ -1,6 +1,6 @@
 // Tulpar sunucusuyla konuşma. Adres ve anahtar telefonda güvenli depoda (SecureStore) durur.
 import * as SecureStore from 'expo-secure-store';
-import { File } from 'expo-file-system';
+import { File, Paths } from 'expo-file-system';
 import { fetch as akisFetch } from 'expo/fetch';
 
 export type Ayar = { adres: string; anahtar: string; yedek?: string };  // yedek: ev ağı adresi (Tailscale çalışmazsa)
@@ -171,3 +171,18 @@ export const saat = (t: number) => {
 
 export type AsistanSohbet = { id: number; baslik: string; guncel: number; son: string | null };
 export type AsistanMesaj = { id: number; rol: 'ben' | 'tulpar'; metin: string; eylem: { tur: string; id: number } | null; zaman: number };
+
+/** Metni HP'de Türkçe sesle sentezletir; çalınabilir bir dosya yolu (uri) döner. */
+export async function sentezle(metin: string): Promise<string> {
+  const a = await ayarOku();
+  if (!a) throw new Error('Sunucu ayarı yok');
+  const y = await getirTekrarli(a, '/tts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-tulpar-anahtar': a.anahtar },
+    body: JSON.stringify({ metin }),
+  }, 60000);
+  if (!y.ok) throw new Error(`tts ${y.status}`);
+  const dosya = new File(Paths.cache, `tts-${Date.now()}-${Math.floor(Math.random() * 1e6)}.wav`);
+  dosya.write(new Uint8Array(await y.arrayBuffer()));
+  return dosya.uri;
+}

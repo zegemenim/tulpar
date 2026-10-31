@@ -1,10 +1,11 @@
 // Sesli konuşma: kaydet -> HP'de Whisper ile yazıya dök -> Tulpar'a sor -> cevabı sesli oku.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
+import { AudioModule, createAudioPlayer, RecordingPresets, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
+import { File } from 'expo-file-system';
 import * as Speech from 'expo-speech';
 import * as Haptics from 'expo-haptics';
 import * as SecureStore from 'expo-secure-store';
-import { konusAkis, sesGonder } from './api';
+import { konusAkis, sentezle, sesGonder } from './api';
 
 export type Durum = 'bos' | 'dinliyor' | 'yaziya' | 'dusunuyor' | 'konusuyor';
 export type Konusma = { kim: 'ben' | 'tulpar'; metin: string; eylem?: { tur: string; id: number } | null };
@@ -14,6 +15,51 @@ export type Konusma = { kim: 'ben' | 'tulpar'; metin: string; eylem?: { tur: str
 const SESSIZ_DB = -42;          // bunun altı sessizlik sayılır
 const SON_SESSIZLIK_MS = 1600;  // konuştuktan sonra bu kadar sessizlik: bitti
 const HIC_KONUSMAZSA_MS = 8000; // açıldıktan sonra bu sürede konuşma başlamazsa kapat
+
+// Cevabın sesli okunması: her cümle HP'de Türkçe sesle üretilir (Piper), sırayla çalınır. Üretim ve çalma birbirini
+// beklemez (sıradaki cümle hazırlanırken öncekiyle devam edilir). HP'ye ulaşılamazsa telefonun kendi sesine düşer.
+let okumaSirasi: Promise<void> = Promise.resolve();
+let okumaIptal = 0;
+let suAnki: ReturnType<typeof createAudioPlayer> | null = null;
+
+function cal(uri: string): Promise<void> {
+  return new Promise((bitti) => {
+    const p = createAudioPlayer(uri);
+    suAnki = p;
+    const son = () => { try { p.remove(); } catch {} try { new File(uri).delete(); } catch {} if (suAnki === p) suAnki = null; bitti(); };
+    p.addListener('playbackStatusUpdate', (d: { didJustFinish: boolean }) => { if (d.didJustFinish) son(); });
+    p.play();
+    setTimeout(son, 60000);  // güvenlik: takılırsa sırayı bırak
+  });
+}
+
+export function sesliOku(cumle: string) {
+  const nesil = okumaIptal;
+  bekleyen += 1;
+  const hazir = sentezle(cumle).catch(() => null);  // üretim hemen başlar
+  okumaSirasi = okumaSirasi.then(async () => {
+    try {
+      if (nesil !== okumaIptal) return;  // susturuldu
+      const uri = await hazir;
+      if (nesil !== okumaIptal) return;
+      if (uri) await cal(uri);
+      else Speech.speak(cumle, { language: 'tr-TR' });
+    } finally { bekleyen = Math.max(0, bekleyen - 1); }
+  });
+}
+
+export function sesliOkumaDurdur() {
+  okumaIptal += 1;
+  bekleyen = 0;
+  okumaSirasi = Promise.resolve();
+  try { suAnki?.pause(); suAnki?.remove(); } catch {}
+  suAnki = null;
+  Speech.stop();
+}
+
+export function sesliOkunuyor() { return suAnki !== null; }
+let bekleyen = 0;
+export function okumaBitti() { return bekleyen === 0; }
 
 export function useSesliAsistan(eklendi: (k: Konusma) => void, guncellendi?: (metin: string, eylem?: Konusma['eylem']) => void) {
   const kayit = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
@@ -52,7 +98,7 @@ export function useSesliAsistan(eklendi: (k: Konusma) => void, guncellendi?: (me
       okunan += m;
       if (!cumle) return;
       if (!konusuyor) { konusuyor = true; setDurum('konusuyor'); }
-      Speech.speak(cumle, { language: 'tr-TR' });
+      sesliOku(cumle);
     };
     try {
       let ilk = true;
@@ -77,7 +123,7 @@ export function useSesliAsistan(eklendi: (k: Konusma) => void, guncellendi?: (me
         if (otomatikDinle) basladiRef.current();
       } else {  // sıradaki cümlelerin okunması bitince "boş"a dön (veya cevabı dinle)
         const z = setInterval(async () => {
-          if (!(await Speech.isSpeakingAsync())) {
+          if (!(await Speech.isSpeakingAsync()) && !sesliOkunuyor() && okumaBitti()) {
             clearInterval(z);
             if (durumRef.current === 'konusuyor') { setDurum('bos'); if (otomatikDinle) basladiRef.current(); }
           }
@@ -91,7 +137,7 @@ export function useSesliAsistan(eklendi: (k: Konusma) => void, guncellendi?: (me
 
   const basla = useCallback(async () => {
     setHata(null);
-    Speech.stop();
+    sesliOkumaDurdur();
     const izin = await AudioModule.requestRecordingPermissionsAsync();
     if (!izin.granted) return setHata('Mikrofon izni yok');
     await kayit.prepareToRecordAsync();
@@ -132,7 +178,7 @@ export function useSesliAsistan(eklendi: (k: Konusma) => void, guncellendi?: (me
 
   basladiRef.current = basla;
   bitirRef.current = bitir;
-  return { durum, hata, basla, bitir, sor, sohbetId, setSohbetId, sustur: () => { Speech.stop(); setDurum('bos'); } };
+  return { durum, hata, basla, bitir, sor, sohbetId, setSohbetId, sustur: () => { sesliOkumaDurdur(); setDurum('bos'); } };
 }
 
 export const durumYazisi: Record<Durum, string> = {

@@ -8,13 +8,14 @@ import threading
 import time
 
 from fastapi import APIRouter, Body, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 
 import ayarlar
 import db
 import llm
 import sahip
 import ses
+import tts
 from kuyruk import Is, log
 
 VERI = pathlib.Path.home() / "tulpar/veri"
@@ -526,3 +527,13 @@ def uygulama_vosk_spk():
     if not yol.exists():
         raise HTTPException(404, "konuşmacı modeli HP'de yok")
     return FileResponse(yol, media_type="application/zip", filename="vosk-spk.zip")
+
+
+@router.post("/tts")
+def konus_sentez(govde: dict = Body(...)):
+    """Metni HP'de Türkçe sesle okur ve WAV döndürür (uygulama cümle cümle çalar)."""
+    metin = (govde.get("metin") or "").strip()
+    if not metin or len(metin) > 600:
+        raise HTTPException(400, "metin boş veya çok uzun")
+    wav = tts.uret(metin)
+    return Response(wav, media_type="audio/wav")
