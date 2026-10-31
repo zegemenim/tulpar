@@ -41,8 +41,8 @@ export default function Ayarlar() {
 
       <View style={[kart, s.satir]}>
         <View style={{ flex: 1 }}>
-          <Text style={[s.bas, { color: r.yazi }]}>Açılınca dinlemeye başla</Text>
-          <Text style={{ color: r.soluk }}>Tulpar asistan tuşuyla açıldığında hemen seni dinler.</Text>
+          <Text style={[s.bas, { color: r.yazi }]}>Asistan olarak açılınca dinle</Text>
+          <Text style={{ color: r.soluk }}>Güç tuşuna basılı tutunca (veya sesle) açılınca hemen dinler. Uygulamayı kendin açınca dinlemez.</Text>
         </View>
         <Switch value={dinle} onValueChange={(v) => { setDinle(v); SecureStore.setItemAsync('acilista_dinle', v ? 'evet' : 'hayir'); }} />
       </View>

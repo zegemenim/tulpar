@@ -35,6 +35,7 @@ export default function Kok() {
         <Stack.Screen name="(sekmeler)" options={{ headerShown: false }} />
         <Stack.Screen name="sohbet/[id]" options={{ title: '' }} />
         <Stack.Screen name="kurulum" options={{ title: 'Sunucuya bağlan' }} />
+        <Stack.Screen name="dinle" options={{ headerShown: false }} />
       </Stack>
     </>
   );

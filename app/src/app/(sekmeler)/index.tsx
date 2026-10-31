@@ -1,7 +1,7 @@
 // Ana ekran: Tulpar'la konuşma (sesli/yazılı), onay bekleyenler, bekleyen taslaklar, son önemli mesajlar.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { Ionicons } from '@expo/vector-icons';
 import OnayKart from '../../bilesenler/OnayKart';
@@ -10,7 +10,6 @@ import { yokla } from '../../lib/bildirim';
 import { durumYazisi, Konusma, useSesliAsistan } from '../../lib/ses';
 import { useRenk } from '../../lib/tema';
 
-let acilisDinlendi = false;  // asistan olarak açılınca bir kez otomatik dinle
 
 export default function AnaEkran() {
   const r = useRenk();
@@ -44,11 +43,12 @@ export default function AnaEkran() {
     return () => clearInterval(z);
   }, [yenile]));
 
+  // Sadece asistan olarak açılınca (güç tuşu / sesle uyandırma: tulpar://dinle) otomatik dinle; elle açınca değil
+  const { dinle } = useLocalSearchParams<{ dinle?: string }>();
   useEffect(() => {
-    if (acilisDinlendi) return;
-    acilisDinlendi = true;
+    if (!dinle) return;
     SecureStore.getItemAsync('acilista_dinle').then((v) => { if (v !== 'hayir') asistan.basla(); });
-  }, []);
+  }, [dinle]);
 
   useEffect(() => { if (konusma.at(-1)?.eylem) yenile(); }, [konusma, yenile]);
 
