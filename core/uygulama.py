@@ -399,7 +399,8 @@ def _arac_uygula(metin, dogrudan=False, gecmis=None, sid=None):
     elif arac == "whatsapp_taslak":
         sonuc = _taslak_yaz(p.get("kisi"), metin)  # sahibin tüm sözü: araç parametresi bilgiyi kısaltabiliyor
         if sonuc.get("tid"):
-            eylem = {"tur": "taslak", "id": sonuc["tid"]}
+            eylem = {"tur": "taslak", "id": sonuc["tid"],
+                     "sabit": f"Taslağı hazırladım, onayını bekliyor ({sonuc['ad']}): {sonuc['metin']}"}  # model 'gönderdim' diyebiliyor: sabit cevap
             ek = (f"\nAz önce \"{sonuc['ad']}\" için WhatsApp taslağı hazırladın (henüz GÖNDERİLMEDİ): \"{sonuc['metin']}\". "
                   "Cevabına şu cümleyle başla: 'Taslağı hazırladım, onayını bekliyor:' ve ardından taslağı kısaca tekrar et. "
                   "'Gönderdim' veya 'iletildi' DEME.")
@@ -421,7 +422,8 @@ def konus(govde: dict = Body(...)):
     if not metin:
         raise HTTPException(400, "metin boş")
     arac, eylem, sistem = _arac_uygula(metin)
-    cevap = _baglam["kuyruk"].ekle(Is("komut", sistem, metin, json_cevap=False)).bekle(180) or "Şu an cevap veremedim."
+    sabit = eylem.pop("sabit", None) if eylem else None
+    cevap = sabit or _baglam["kuyruk"].ekle(Is("komut", sistem, metin, json_cevap=False)).bekle(180) or "Şu an cevap veremedim."
     log(f"konusma: {metin[:50]} -> {arac}")
     return {"cevap": cevap.strip(), "eylem": eylem, "arac": arac}
 
@@ -500,9 +502,10 @@ def konus_akis(govde: dict = Body(...)):
                 arac, eylem, sistem = _arac_uygula(metin, dogrudan=True, gecmis=gecmis[-8:], sid=sid)
             else:  # sohbet/soru: araç kararını atla, hemen cevaba geç
                 sistem = _sistem(_baglam["bugun"]())
+            sabit = eylem.pop("sabit", None) if eylem else None
             yield json.dumps({"tur": "eylem", "eylem": eylem, "arac": arac}, ensure_ascii=False) + "\n"
             try:
-                for parca in llm.akis("hizli", sistem, metin, gecmis=gecmis):
+                for parca in ([sabit] if sabit else llm.akis("hizli", sistem, metin, gecmis=gecmis)):
                     cevap.append(parca)
                     yield json.dumps({"tur": "parca", "metin": parca}, ensure_ascii=False) + "\n"
             except Exception as e:

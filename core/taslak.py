@@ -126,5 +126,10 @@ def hazirla(kuyruk, sohbet_id, sohbet_adi, gelenler, talimat=None):
             break
         istem += ("\n\nÖNCEKİ TASLAK REDDEDİLDİ: " + uyarilar[0] + ". Bu kelimeleri kullanma.") if uyarilar else ""
     if talimat:  # sözlü talimat: tek seçenek, tek mesaj
-        secenekler = [{"etiket": "Talimatına göre", "mesajlar": secenekler[0]["mesajlar"]}] if secenekler else secenekler
+        if secenekler:  # art arda aynı metin tekrar etmesin
+            tek = []
+            for m in secenekler[0]["mesajlar"]:
+                if not tek or tek[-1]["metin"].strip().lower() != m["metin"].strip().lower():
+                    tek.append(m)
+            secenekler = [{"etiket": "Talimatına göre", "mesajlar": tek}]
     return db.taslak_ekle(sohbet_id, sohbet_adi, [m["id"] for m in gelenler], cevap.get("ozet"), secenekler, uyarilar)
