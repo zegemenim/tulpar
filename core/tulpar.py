@@ -14,6 +14,7 @@ from datetime import datetime
 from fastapi import Body, Depends, FastAPI, HTTPException, Request
 
 import db
+import ayarlar
 import kurallar
 import sahip
 import ses
@@ -29,7 +30,6 @@ if not ANAHTAR_YOL.exists():
 ANAHTAR = ANAHTAR_YOL.read_text().strip()
 ISTEM = {k: sahip.doldur(v) for k, v in json.loads((pathlib.Path(__file__).parent / "istemler.json").read_text()).items()}
 KOPRU = "http://127.0.0.1:8099"
-TOPLAMA_SN = int(__import__("os").environ.get("TOPLAMA_SN", 90))  # aynı sohbetten art arda gelenleri tek taslakta topla
 GUNLER = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
 # HP'nin kendisi, Tailscale ağı ve ev ağı (sahibi onayladı: evde Tailscale yoksa da bağlanılsın; anahtar yine şart)
 IZINLI_AG = [ipaddress.ip_network(a) for a in ("127.0.0.0/8", "100.64.0.0/10", "192.168.1.0/24")]
@@ -65,11 +65,9 @@ app.include_router(uygulama.router, dependencies=[Depends(yetki)])
 uygulama.bagla(kuyruk, ISTEM, bugun, lambda m: taslak.hazirla(kuyruk, m["sohbet_id"], m.get("sohbet_adi"), [m]))
 
 
-GRUP_TOPLAMA_SN = 60    # grupta art arda gelenler bu kadar sessizlikten sonra tek seferde değerlendirilir
-BIREBIR_TOPLAMA_SN = 20  # birebirde daha kısa: acil bir şey olabilir
-
 def _toplama_sn(m):
-    return GRUP_TOPLAMA_SN if m.get("grup") else BIREBIR_TOPLAMA_SN
+    """Grupta/birebirde art arda gelenler bu kadar sessizlikten sonra tek seferde değerlendirilir (ayarlanabilir)."""
+    return ayarlar.al("grup_toplama_sn" if m.get("grup") else "birebir_toplama_sn")
 
 _grup = {}  # sohbet_id -> {"mesajlar": [...], "son": zaman, "zamanlayici": bool}
 
@@ -115,7 +113,8 @@ def ele(m, toplu=None):
         kaynak = f"{kaynak} (grup), yazan: {m.get('gonderen_adi')}"
     sistem = ISTEM["system_triage"].replace("{bugun}", bugun())
     yeni = {x["id"] for x in (toplu or [m])}
-    onceki = [x for x in db.son_mesajlar(m["sohbet_id"], 16 + len(yeni)) if x["id"] not in yeni][-15:]
+    n = ayarlar.al("baglam_mesaj")
+    onceki = [x for x in db.son_mesajlar(m["sohbet_id"], n + 1 + len(yeni)) if x["id"] not in yeni][-n:]
     baglam = "\n".join(f"{sahip.AD if x['benden'] else x.get('gonderen_adi') or '?'}: {x['metin'][:200]}" for x in onceki)
     if toplu and len(toplu) > 1:
         degerlendir = ("Değerlendirilecek mesajlar (art arda geldi; HEPSİNİ birlikte değerlendir, en önemli olana göre karar ver):\n"
@@ -176,14 +175,14 @@ def zamanla(sohbet_id, sohbet_adi, sure=None):
         if d["zamanlayici"] and sure is None:
             return
         d["zamanlayici"] = True
-    threading.Timer(sure or TOPLAMA_SN, taslak_yap, args=(sohbet_id, sohbet_adi)).start()
+    threading.Timer(sure or ayarlar.al("taslak_bekleme_sn"), taslak_yap, args=(sohbet_id, sohbet_adi)).start()
 
 
 def taslak_yap(sohbet_id, sohbet_adi):
-    """Sohbet TOPLAMA_SN boyunca sustuysa ve tüm mesajlar elendiyse tek taslak hazırla."""
+    """Sohbet taslak bekleme süresi boyunca sustuysa ve tüm mesajlar elendiyse tek taslak hazırla."""
     with _kilit:
         d = _sohbet[sohbet_id]
-        kalan = TOPLAMA_SN - (time.time() - d["son"])
+        kalan = ayarlar.al("taslak_bekleme_sn") - (time.time() - d["son"])
         if d["eleme"] > 0 or kalan > 0:
             bekle = max(kalan, 3)
         else:

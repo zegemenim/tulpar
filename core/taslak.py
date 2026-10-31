@@ -3,6 +3,7 @@ import json
 import re
 import time
 
+import ayarlar
 import db
 import sahip
 from kuyruk import Is
@@ -40,7 +41,7 @@ def kart_getir(kuyruk, sohbet_id, ad, gecmis):
     kart = db.kisi(sohbet_id)
     if kart and kart.get("iliski") != "bilinmiyor":
         return kart
-    metin = "\n".join(f"{sahip.AD if m['benden'] else m.get('gonderen_adi') or ad}: {m['metin']}" for m in gecmis[-15:])
+    metin = "\n".join(f"{sahip.AD if m['benden'] else m.get('gonderen_adi') or ad}: {m['metin']}" for m in gecmis[-ayarlar.al("baglam_mesaj"):])
     tahmin = kuyruk.ekle(Is("eleme", KART_SISTEM, f"Kişi adı (rehber): {ad}\nSohbet:\n{metin}")).bekle(300) or {}
     return db.kisi_kaydet(sohbet_id, ad=ad, iliski=tahmin.get("iliski") or "bilinmiyor",
                           hitap=tahmin.get("hitap"), sen_siz=tahmin.get("sen_siz"), guven="tahmin")

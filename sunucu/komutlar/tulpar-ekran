@@ -3,7 +3,8 @@
 #   tulpar-ekran ac | kapat | durum | adres <url>
 # Açıkken her dakika ekranın küçük bir görüntüsünü alıp parmak izini karşılaştırır (görüntü kaydedilmez);
 # BOSTA_DK dakika boyunca hiç değişmezse kendini kapatır. Kapalıyken hiçbir kaynak kullanmaz.
-BOSTA_DK=${BOSTA_DK:-30}
+# kapanma süresi ayarlardan (tulpar-izle → s); yoksa 30 dk
+BOSTA_DK=$(python3 -c "import json;print(json.load(open('$HOME/tulpar/veri/ayarlar.json')).get('ekran_bosta_dk', 30))" 2>/dev/null || echo 30)
 AYAR=~/tulpar/veri/ekran.conf
 case "$1" in
   ac)    sudo systemctl start tulpar-ekran.service tulpar-ekran-izle.service && echo "ikinci ekran açıldı" ;;

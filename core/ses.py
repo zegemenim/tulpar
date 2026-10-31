@@ -6,6 +6,7 @@ import time
 
 import numpy as np
 
+import ayarlar
 from kuyruk import log
 
 MODEL_YOL = pathlib.Path.home() / "tulpar/models/whisper"
@@ -31,7 +32,6 @@ def _yukle():
                               download_root=str(MODEL_YOL))
 
 
-BOSTA_BIRAK_SN = 120  # Gemma ile birlikte 16 GB'a sığmıyor: kullanılmayınca bellekten at
 _son_kullanim = 0.0
 
 
@@ -40,7 +40,7 @@ def _bosta_birak():
     while True:
         time.sleep(30)
         with _kilit:
-            if _model is not None and time.time() - _son_kullanim > BOSTA_BIRAK_SN:
+            if _model is not None and time.time() - _son_kullanim > ayarlar.al("whisper_bosta_sn"):  # Gemma ile 16 GB'a sığmıyor
                 _model = None
                 import gc
                 gc.collect()

@@ -10,6 +10,7 @@ import time
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 
+import ayarlar
 import db
 import llm
 import sahip
@@ -17,7 +18,6 @@ import ses
 from kuyruk import Is, log
 
 VERI = pathlib.Path.home() / "tulpar/veri"
-REDDEDILEN_SAKLA_SN = 7 * 86400
 router = APIRouter()
 _baglam = {}  # kuyruk ve istemler tulpar.py'den bağlanır
 
@@ -62,7 +62,7 @@ def elemeden_onay(m, sonuc):
 
 @router.get("/ana")
 def ana():
-    db.yaz("DELETE FROM onaylar WHERE durum='reddedildi' AND karar<?", time.time() - REDDEDILEN_SAKLA_SN)
+    db.yaz("DELETE FROM onaylar WHERE durum='reddedildi' AND karar<?", time.time() - ayarlar.al("reddedilen_sakla_gun") * 86400)
     onemli = db.oku("""SELECT id, sohbet_id, sohbet_adi, gonderen_adi, metin, zaman, eleme FROM mesajlar
                        WHERE benden=0 AND zaman>? AND eleme LIKE '%"onem": "yuksek"%' ORDER BY zaman DESC LIMIT 30""",
                     time.time() - 86400)
@@ -288,11 +288,10 @@ def konus(govde: dict = Body(...)):
 
 # ---------- sohbetler (Claude/Gemini'deki gibi; geri dönülebilir) ----------
 
-GECMIS_MESAJ = 16  # modele verilen son mesaj sayısı; daha eskisi özetle temsil edilir
 
 
 def _sohbet_gecmisi(sid):
-    satirlar = db.oku("SELECT rol, metin FROM asistan_mesaj WHERE sohbet_id=? ORDER BY id DESC LIMIT ?", sid, GECMIS_MESAJ)
+    satirlar = db.oku("SELECT rol, metin FROM asistan_mesaj WHERE sohbet_id=? ORDER BY id DESC LIMIT ?", sid, ayarlar.al("sohbet_gecmis_mesaj"))
     ozet = (db.oku("SELECT ozet FROM asistan_sohbet WHERE id=?", sid) or [{}])[0].get("ozet")
     gecmis = [("user" if r["rol"] == "ben" else "assistant", r["metin"]) for r in reversed(satirlar)]
     if ozet:
@@ -303,9 +302,10 @@ def _sohbet_gecmisi(sid):
 def _ozetle_gerekirse(sid):
     """Sohbet uzayınca eski mesajları kısa bir özete çevirir (model yavaşlamasın, konu kaybolmasın)."""
     n = db.oku("SELECT COUNT(*) n FROM asistan_mesaj WHERE sohbet_id=?", sid)[0]["n"]
-    if n <= GECMIS_MESAJ + 8 or n % 8:
+    sinir = ayarlar.al("sohbet_gecmis_mesaj")
+    if n <= sinir + 8 or n % 8:
         return
-    eski = db.oku("SELECT rol, metin FROM asistan_mesaj WHERE sohbet_id=? ORDER BY id LIMIT ?", sid, n - GECMIS_MESAJ)
+    eski = db.oku("SELECT rol, metin FROM asistan_mesaj WHERE sohbet_id=? ORDER BY id LIMIT ?", sid, n - sinir)
     onceki = (db.oku("SELECT ozet FROM asistan_sohbet WHERE id=?", sid) or [{}])[0].get("ozet") or ""
     metin = (f"Önceki özet: {onceki}\n" if onceki else "") + "\n".join(
         f"{'Sahibi' if m['rol'] == 'ben' else 'Tulpar'}: {m['metin']}" for m in eski)
@@ -490,3 +490,21 @@ def hafiza_ekle(govde: dict = Body(...)):
 def hafiza_sil(hid: int):
     db.yaz("DELETE FROM hafiza WHERE id=?", hid)
     return {"tamam": True}
+
+
+
+# ---------- ayarlar (uygulamadan değiştirmek için) ----------
+
+@router.get("/ayarlar")
+def ayar_listesi():
+    return ayarlar.liste()
+
+
+@router.post("/ayarlar")
+def ayar_degistir(govde: dict = Body(...)):
+    try:
+        deger = ayarlar.yaz(govde["anahtar"], govde["deger"])
+    except (KeyError, ValueError) as e:
+        raise HTTPException(400, str(e))
+    log(f"ayar degisti: {govde['anahtar']} = {deger}")
+    return {"deger": deger}
