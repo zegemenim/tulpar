@@ -30,7 +30,8 @@ KURALLAR = [
     ("rahatsiz_etme_ac", re.compile(r"(?i)rahatsız etme(yi)?\s*(aç|ac|başlat|baslat|devreye)|odak(\s*modu)?\s*(aç|ac)|sessiz mod(a)?\s*(geç|gec|aç|ac)")),
     ("rahatsiz_etme_kapat", re.compile(r"(?i)rahatsız etme(yi)?\s*(kapat|bitir|iptal)")),
 ]
-ETIKET = {"medya_devam": "müzik devam ediyor", "medya_dur": "duraklatıldı", "medya_sonraki": "sonraki parça", "medya_onceki": "önceki parça",
+SARKI = re.compile(r"(?i)^(.{3,60}?)\s+(?:çal|cal|oynat)$")
+ETIKET = {"sarki_cal": "şarkı aranıp çalınıyor", "medya_devam": "müzik devam ediyor", "medya_dur": "duraklatıldı", "medya_sonraki": "sonraki parça", "medya_onceki": "önceki parça",
           "medya_cal": "müzik başlatıldı", "sessiz": "ses kapatıldı", "ses_ayar": "ses ayarlandı", "parlaklik_ayar": "parlaklık ayarlandı", "ses_ac": "ses açıldı", "ses_kis": "ses kısıldı",
           "parlaklik_ac": "parlaklık artırıldı", "parlaklik_kis": "parlaklık azaltıldı",
           "rahatsiz_etme_ac": "rahatsız etme açıldı", "rahatsiz_etme_kapat": "rahatsız etme kapatıldı"}
@@ -53,6 +54,12 @@ def tani(metin):
         if desen.search(m):
             sayi = SAYI.search(m)
             return islem, _hedef(m), (min(int(sayi.group(1)), 100) if sayi and islem.startswith(("ses", "parlaklik")) and islem.endswith("ayar") else None)
+    s = SARKI.match(m)
+    if s:
+        ad = re.sub(r"(?i)\b(şarkısını|sarkisini|parçasını|youtube music(?:te|ten)?|yt music(?:te|ten)?|mac(?:'?te|te)?|macbook(?:'?ta|ta)?|bilgisayar\w*|telefon\w*)\b", " ", s.group(1))
+        ad = " ".join(ad.split())
+        if ad and not re.match(r"(?i)(ses|parlakl|rahatsız|müzik|muzik|odak)", ad):
+            return "sarki_cal", _hedef(m), ad
     return None
 
 

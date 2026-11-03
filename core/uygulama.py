@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 import ayarlar
 import db
 import llm
+import pano
 import sahip
 import cihaz
 import ses
@@ -151,6 +152,16 @@ def onay_karar(oid: int, govde: dict = Body(...)):
 
 
 # ---------- görevler ----------
+
+@router.get("/pano")
+def pano_oku():
+    return pano.oku()
+
+
+@router.post("/pano")
+def pano_yaz(govde: dict = Body(...)):
+    return {"kabul": pano.yaz(str(govde.get("metin", "")), str(govde.get("kaynak", "?")))}
+
 
 @router.get("/gorevler")
 def gorevler(durum: str = "acik"):

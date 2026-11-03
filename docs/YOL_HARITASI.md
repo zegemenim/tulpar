@@ -56,8 +56,11 @@ Karar: model (Gemma) bölünmez (ağ gecikmesi hızı çökertir); yan işler y�
 Karar: "sesi aç", "müziği durdur" gibi basit komutlar Gemma'ya hiç gitmez. Önce kural tabanlı hızlı yol (saniyenin altında, RAM harcamaz); tanınmazsa normal yol. Ayrı bir küçük model şimdilik kurulmayacak: kurallar bu komut türünün büyük kısmını bedavaya çözüyor, HP'nin RAM'i model + Whisper ile dolu, Pi'de yer dar. Kurallar yetmezse (serbest ifadeler) 2. aşamada küçük bir sınıflandırıcı eklenir.
 - [x] Hızlı yol: `core/cihaz.py` (ses aç/kıs/ayarla/sessiz, parlaklık, müzik dur/devam/sonraki/önceki, rahatsız etme) sohbet ve sesli konuşma uç noktalarına bağlı.
 - [x] Mac ajanı: `sunucu/cihaz/mac-ajan.py` + `kur-mac.sh` (port 8097, anahtarlı, sabit işlem listesi; YouTube Music'i Chrome'dan kontrol eder: "en son çalınanı devam ettir").
-- [ ] Mac ajanını kurmak (Mac'te `sh sunucu/cihaz/kur-mac.sh`; Chrome'da Apple Events JavaScript izni; Erişilebilirlik izni; rahatsız etme için "Tulpar Rahatsız Etme Aç/Kapat" Kısayolları).
+- [x] Mac ajanı Mac'e kuruldu (LaunchAgent, 3 Kasım). Kalan izinler: Chrome'da Apple Events JavaScript izni; Erişilebilirlik izni; HP'de `veri/cihazlar.json` ve Mac'te `~/.tulpar-ajan/hp.json` (HP erişilince). Eski not: ( Chrome'da Apple Events JavaScript izni; Erişilebilirlik izni; rahatsız etme için "Tulpar Rahatsız Etme Aç/Kapat" Kısayolları).
 - [ ] Telefon: uygulamada yerel modül (ses, parlaklık, rahatsız etme izni) — sunucudan gelen `cihaz` eylemini uygular.
+- [x] Pano eşitleme: HP `/pano` (bellekte, geçmişsiz, şifre gibi metinler atlanır) + Mac ajanı 2 sn'de bir eşitler; telefon tarafı APK ile.
+- [x] Mac menü çubuğu uygulaması `sunucu/cihaz/mac-menu.py` (rumps; taslak/görev listesi + ses/müzik/parlaklık/rahatsız etme). Kurulum için `pip install rumps` ve hp.json gerekir.
+- [x] "X şarkısını çal" hızlı yolu (YT Music araması, kırılgan).
 - [ ] Uygulamada "Cihazlarım" ekranı (aynı komutlar düğmelerle).
 - [ ] Diğer cihazlar (Windows/Linux ajanı, Home Assistant üzerinden Pi'deki akıllı cihazlar).
 

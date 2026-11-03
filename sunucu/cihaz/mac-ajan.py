@@ -62,6 +62,8 @@ def islem(ad, deger):
         osa("set volume with output muted")
     elif ad in ("medya_dur", "medya_cal"):
         return ytm_js("document.querySelector('#play-pause-button').click()") or "tamam"
+    elif ad == "sarki_cal":
+        return ytm_sarki_cal(deger)
     elif ad == "medya_devam":
         return ytm_ac_ve_devam()
     elif ad == "medya_sonraki":
@@ -99,4 +101,46 @@ class Is(BaseHTTPRequestHandler):
         self.send_response(kod); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
 
 
-ThreadingHTTPServer(("0.0.0.0", 8097), Is).serve_forever()
+def ytm_sarki_cal(ad):
+    """YouTube Music'te arar ve ilk şarkıyı çalar (sayfa yapısına bağlı, kırılabilir)."""
+    ad = "".join(c for c in str(ad) if c.isalnum() or c in " -'").strip()[:80]
+    if not ad:
+        return "şarkı adı boş"
+    url = "https://" + YTM + "/search?q=" + ad.replace(" ", "+")
+    osa(f'tell application "Google Chrome" to open location "{url}"')
+    time.sleep(6)
+    js = ("(document.querySelector('ytmusic-shelf-renderer ytmusic-responsive-list-item-renderer #play-button')"
+          "||document.querySelector('ytmusic-responsive-list-item-renderer')).click();'tamam'")
+    return ytm_js(js) or "tamam"
+
+
+# ---- pano eşitleme: ~/.tulpar-ajan/hp.json {"adres": "http://100.x:8000", "anahtar": "..."} varsa çalışır ----
+def pano_esitle():
+    import urllib.request
+    yol = pathlib.Path.home() / ".tulpar-ajan/hp.json"
+    if not yol.exists():
+        return
+    hp = json.loads(yol.read_text())
+    baslik = {"x-tulpar-anahtar": hp["anahtar"], "Content-Type": "application/json"}
+    son = subprocess.run(["pbpaste"], capture_output=True, text=True).stdout
+    while True:
+        time.sleep(2)
+        try:
+            simdi = subprocess.run(["pbpaste"], capture_output=True, text=True).stdout
+            if simdi != son and simdi.strip():
+                son = simdi
+                urllib.request.urlopen(urllib.request.Request(hp["adres"] + "/pano", method="POST", headers=baslik,
+                                       data=json.dumps({"metin": simdi, "kaynak": "mac"}).encode()), timeout=5)
+            else:
+                r = json.load(urllib.request.urlopen(urllib.request.Request(hp["adres"] + "/pano", headers=baslik), timeout=5))
+                if r["metin"] and r["kaynak"] != "mac" and r["metin"] != son:
+                    son = r["metin"]
+                    subprocess.run(["pbcopy"], input=son, text=True)
+        except Exception:  # noqa: BLE001  ağ yoksa sessizce yeniden dener
+            time.sleep(10)
+
+
+if __name__ == "__main__":
+    import threading
+    threading.Thread(target=pano_esitle, daemon=True).start()
+    ThreadingHTTPServer(("0.0.0.0", 8097), Is).serve_forever()
