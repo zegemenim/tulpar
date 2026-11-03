@@ -19,7 +19,8 @@ def _yukle():
         satirlar = [json.loads(s) for s in DOSYA.read_text().splitlines() if s.strip()]
     except (FileNotFoundError, ValueError):
         return []
-    return [s for s in satirlar if time.time() - s["zaman"] < SAKLAMA_SN]
+    simdi = time.time()
+    return [s for s in satirlar if simdi - s["zaman"] < SAKLAMA_SN and s.get("sona_erer", simdi + 1) > simdi]
 
 
 def _baslangic():
@@ -35,13 +36,22 @@ def uygun(metin):
     return not (" " not in t and "\n" not in t and _sifre_gibi(t))
 
 
-def yaz(metin, kaynak):
-    if not uygun(metin):
+KOD_OMRU_SN = 600
+
+
+def yaz(metin, kaynak, kod=False):
+    """kod=True: doğrulama kodu; şifre denetimine takılmaz ama geçmişten 10 dk sonra silinir."""
+    if kod and not (metin or "").strip():
+        return False
+    if not kod and not uygun(metin):
         return False
     with _kilit:
         if metin == _son["metin"]:
             return True
         _son.update(metin=metin, kaynak=kaynak, zaman=time.time())
+        _son.pop("sona_erer", None)
+        if kod:
+            _son["sona_erer"] = time.time() + KOD_OMRU_SN
         g = _yukle() + [dict(_son)]  # 7 günden eskiler her yazışta ayıklanır
         DOSYA.parent.mkdir(parents=True, exist_ok=True)
         DOSYA.write_text("\n".join(json.dumps(x, ensure_ascii=False) for x in g) + "\n")

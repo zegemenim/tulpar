@@ -124,6 +124,11 @@ class CihazServisi : Service() {
 const DINLEYICI = (p) => `package ${p}
 
 import android.app.Notification
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -157,6 +162,9 @@ class BildirimDinleyici : NotificationListenerService() {
       tampon.add(JSONObject().put("paket", sbn.packageName).put("baslik", baslik).put("metin", metin).put("tur", tur).put("zaman", sbn.postTime / 1000.0))
     }
     baslat()
+    if (Regex("(?i)kod|şifre|sifre|code|otp|parola|pin").containsMatchIn(baslik + " " + metin) && Regex("\\\\d{4,8}|[A-Za-z0-9]{6,8}").containsMatchIn(metin)) {
+      Thread { try { gonder(applicationContext) } catch (e: Exception) { Log.w("Tulpar", "kod gönderilemedi: " + e.message) } }.start()  // kod gecikmeden gitsin
+    }
   }
 
   private fun baslat() {
@@ -171,7 +179,14 @@ class BildirimDinleyici : NotificationListenerService() {
     }.start()
   }
 
-  private fun gonder(ctx: android.content.Context) {
+  private fun kodu_panoya(ctx: Context, kod: String) {
+    Handler(Looper.getMainLooper()).post {
+      val pano = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+      pano.setPrimaryClip(ClipData.newPlainText("Tulpar doğrulama kodu", kod).apply { description.extras = android.os.PersistableBundle().apply { putBoolean("android.content.extra.IS_SENSITIVE", true) } })
+    }
+  }
+
+  @Synchronized private fun gonder(ctx: android.content.Context) {
     val paket = synchronized(tampon) { if (tampon.isEmpty()) return; ArrayList(tampon) }
     val ayar = File(ctx.filesDir, "sunucu.json")
     if (!ayar.exists()) return
@@ -185,7 +200,9 @@ class BildirimDinleyici : NotificationListenerService() {
         b.setRequestProperty("x-tulpar-anahtar", j.getString("anahtar")); b.setRequestProperty("Content-Type", "application/json")
         b.outputStream.use { it.write(govde) }
         if (b.responseCode != 200) continue
+        val cevap = JSONObject(b.inputStream.bufferedReader().use { it.readText() })
         synchronized(tampon) { tampon.removeAll(paket.toSet()) }  // gönderilenler çıkar, bu arada gelenler kalır
+        if (!cevap.isNull("kod")) kodu_panoya(ctx, cevap.getString("kod"))
         return
       } catch (e: Exception) { continue }
     }

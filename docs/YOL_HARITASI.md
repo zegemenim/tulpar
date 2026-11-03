@@ -25,6 +25,8 @@ Sahibinin istekleri ve kararları. Biten işler işaretlenir; yenileri eklendik�
 5. **Telefon bildirimleri ve SMS okuma**; OTP kodları saklanmaz
    - [x] Sunucu: `core/bildirim.py`, `POST/GET /bildirim` (30 gün, OTP süzgeci, tekrar yok sayma, testli); HP'ye kuruldu
    - [x] Uygulama: `BildirimDinleyici` (WhatsApp ve kalıcı bildirimler atlanır, SMS uygulamasından gelenler `sms` türü), Cihazlar sekmesinde "Bildirim erişimi" düğmesi → APK 23'te (toplu derleme)
+   - [x] Doğrulama kodu: SMS/bildirimden gerçek kod seçilir (kod sözcüğünden sonra gelen; tutar, referans, B1245 gibi harf önekli numara, yıl elenir), panoya 10 dk konur (Mac'e de eşitlenir, telefon kendi panosuna da yazar), geçmişten silinir, `bildirim.jsonl`'a yazılmaz
+   - [x] Mac menüsünde "Telefon bildirimleri" (önemli olanlar: SMS, para/kargo/randevu/güvenlik)
    - [ ] Bildirimlerden özet/görev çıkarma ve Mac menüsünde gösterme; sonra #6 para analizi
 6. **Aylık para analizi**: banka SMS'lerinden harcama özeti, "ne aldın / gerekli miydi", gelirle bütçe ve birikim hedefleri (yatırım tavsiyesi değil)
 7. **Gmail** (5-6 e-posta hesabı Gmail'e yönlendirilip bağlanacak)

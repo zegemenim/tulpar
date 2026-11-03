@@ -202,15 +202,24 @@ def pano_yaz(govde: dict = Body(...)):
 
 @router.post("/bildirim")
 def bildirim_yaz(govde: dict = Body(...)):
-    """Telefondan gelen bildirim/SMS toplu listesi: [{paket, baslik, metin, tur, zaman}]; OTP süzülür."""
-    kabul = sum(bildirim.yaz(str(x.get("paket", "?")), x.get("baslik"), x.get("metin"), str(x.get("tur", "bildirim")), x.get("zaman"))
-                for x in (govde.get("liste") or [])[:200])
-    return {"kabul": kabul}
+    """Telefondan gelen bildirim/SMS toplu listesi: [{paket, baslik, metin, tur, zaman}]. Doğrulama kodu saklanmaz;
+    gerçek kod seçilip panoya konur (10 dk) ve cevapta `kod` olarak döner (telefon kendi panosuna da yazar)."""
+    kabul, kod = 0, None
+    for x in (govde.get("liste") or [])[:200]:
+        metin = f"{x.get('baslik') or ''} {x.get('metin') or ''}"
+        if bildirim.kod_iceriyor(metin):
+            k = bildirim.kod_cikar(metin)
+            if k and time.time() - float(x.get("zaman") or time.time()) < 300:  # eski/yeniden gelen bildirim panoyu ezmesin
+                pano.yaz(k, "telefon (doğrulama kodu)", kod=True)
+                kod = k
+            continue
+        kabul += bildirim.yaz(str(x.get("paket", "?")), x.get("baslik"), x.get("metin"), str(x.get("tur", "bildirim")), x.get("zaman"))
+    return {"kabul": kabul, "kod": kod}
 
 
 @router.get("/bildirim")
-def bildirim_liste(n: int = 100, tur: str = "", paket: str = ""):
-    return bildirim.liste(min(n, 1000), tur or None, paket or None)
+def bildirim_liste(n: int = 100, tur: str = "", paket: str = "", onemli: bool = False):
+    return bildirim.liste(min(n, 1000), tur or None, paket or None, onemli)
 
 
 @router.get("/gorevler")
