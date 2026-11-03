@@ -84,7 +84,8 @@ def uygula(metin):
     hedef = hedef or "telefon"  # söylenmediyse konuştuğu cihaz (telefon)
     if hedef == "telefon":
         log(f"CİHAZ KOMUTU (hızlı yol) | telefon | {islem} {deger or ''}")
-        return f"Tamam, {ETIKET[islem]}.", {"tur": "cihaz", "hedef": "telefon", "islem": islem, "deger": deger}
+        komut("telefon", islem, deger)  # uygulamadaki servis sıradan alıp uygular (en geç 3 sn)
+        return f"Tamam, {ETIKET[islem]}.", None
     sonuc = _ajana_gonder(hedef, islem, deger)
     log(f"CİHAZ KOMUTU (hızlı yol) | {hedef} | {islem} {deger or ''} | {sonuc}")
     if sonuc is None:

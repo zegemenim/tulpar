@@ -14,7 +14,8 @@ done
 APK=android/app/build/outputs/apk/release/app-release.apk
 mkdir -p ../dist && cp "$APK" ../dist/Tulpar.apk
 printf '{"surum": %s, "tarih": "%s", "notlar": %s}\n' "$SURUM" "$(date +%Y-%m-%d)" "$(node -e 'console.log(JSON.stringify(process.argv[1]||""))' "$1")" > /tmp/surum.json
-scp -q "$APK" tulpar:tulpar/veri/uygulama/Tulpar.apk.yeni
-scp -q /tmp/surum.json tulpar:tulpar/veri/uygulama/surum.json.yeni
-ssh -n tulpar 'cd ~/tulpar/veri/uygulama && mv Tulpar.apk.yeni Tulpar.apk && mv surum.json.yeni surum.json'
+HP=${HP_SSH:-tulpar}
+scp -q "$APK" $HP:tulpar/veri/uygulama/Tulpar.apk.yeni
+scp -q /tmp/surum.json $HP:tulpar/veri/uygulama/surum.json.yeni
+ssh -n $HP 'cd ~/tulpar/veri/uygulama && mv Tulpar.apk.yeni Tulpar.apk && mv surum.json.yeni surum.json'
 echo "sürüm $SURUM HP'ye yüklendi"

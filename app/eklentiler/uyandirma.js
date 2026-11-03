@@ -130,6 +130,7 @@ class UyandirmaServisi : Service(), RecognitionListener {
     yoklayici.scheduleWithFixedDelay({
       try { yokla() } catch (e: Exception) { Log.w("Tulpar", "bildirim yoklama: " + e.message) }
     }, 15, 60, TimeUnit.SECONDS)
+    CihazKomutu.baslat(this)  // uzaktan cihaz komutları (eklentiler/cihaz.js)
   }
 
   // Uygulamanın yazdığı sunucu.json: {"adresler": [...], "anahtar": "..."}
