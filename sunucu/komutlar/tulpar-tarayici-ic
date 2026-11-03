@@ -1,0 +1,12 @@
+#!/bin/sh
+# Görünür tarayıcı oturumu: sanal ekran (Xvfb) + VNC (x11vnc, parolalı) + web görüntüleyici (noVNC, 6080) + Chromium (CDP 9222).
+# Telefondan canlı izlenir/kontrol edilir (bot koruması, giriş); Playwright aynı Chromium'a bağlanır. systemd tulpar-tarayici.service çalıştırır.
+export DISPLAY=:99
+P=/home/zegemenim/tulpar/veri/ekran-parola
+[ -s "$P" ] || (umask 077; head -c 12 /dev/urandom | base64 | tr -d "/+=" > "$P")
+Xvfb :99 -screen 0 1280x800x24 -nolisten tcp &
+sleep 1
+x11vnc -display :99 -rfbport 5900 -localhost -passwdfile "$P" -shared -forever -quiet -noxdamage &
+websockify --web /usr/share/novnc 6080 127.0.0.1:5900 &
+exec /snap/bin/chromium --remote-debugging-port=9222 --user-data-dir=/home/zegemenim/tulpar/veri/tarayici-profil \
+  --window-size=1280,800 --window-position=0,0 --no-first-run --no-default-browser-check --disable-translate --ozone-platform=x11 about:blank

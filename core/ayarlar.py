@@ -21,6 +21,9 @@ SEMA = {
                        2, 1, 3),
     "secenek_sayisi": ("WhatsApp", "Taslak seçenek sayısı",
                        "Her taslak için kaç cevap seçeneği hazırlansın (karar gerektiren mesajlarda). Fazlası model süresini uzatır.", 3, 2, 8),
+    "arastirma_gorunur": ("Araştırma", "Görünür tarayıcı",
+                          "1 = araştırma HP'deki görünür tarayıcıda yapılır, uygulamadan canlı izlenir ve bot korumasını (CAPTCHA) sen çözersin; "
+                          "0 = Raspberry Pi'de görünmez yapılır (bot koruması çıkarsa araştırma başarısız olur).", 1, 0, 1),
     "baglam_mesaj": ("WhatsApp", "Değerlendirmede bağlam (mesaj)",
                      "Bir mesaj değerlendirilirken o sohbetin son kaç mesajı bağlam olarak okunur.", 15, 3, 60),
     "sohbet_gecmis_mesaj": ("Konuşma", "Sohbette hatırlanan mesaj",

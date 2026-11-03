@@ -374,12 +374,22 @@ ADIM_KURALI = (
 )
 
 
+def _arastirma_mesaji(sid, soru, metin):
+    """Araştırma sırasında sahibine haber (bildirim gider): örn. CAPTCHA'yı çözmesi gerekiyor."""
+    if not sid or not db.oku("SELECT id FROM asistan_sohbet WHERE id=?", sid):
+        return
+    db.yaz("INSERT INTO asistan_mesaj (sohbet_id, rol, metin, eylem, zaman) VALUES (?,?,?,?,?)", sid, "tulpar", metin,
+           json.dumps({"tur": "arastirma_sonuc", "id": sid}), time.time())
+    db.yaz("UPDATE asistan_sohbet SET guncel=? WHERE id=?", time.time(), sid)
+    log(f"arastirma uyarisi #{sid}: {metin[:60]}")
+
+
 def _arastir(soru, sid):
     """Araştırmayı arka planda yapar; sonucu sohbete Tulpar mesajı olarak yazar (bildirim /bildirimler'den gider)."""
     def model_sor(sistem, icerik):
         return _baglam["kuyruk"].ekle(Is("komut", sistem, icerik, json_cevap=False, aciklama=f"Araştırma özeti: {soru[:60]}")).bekle(900)  # sahibi istedi: acil
     try:
-        sayfalar = tarayici.ara(soru)
+        sayfalar = tarayici.ara(soru, bildir=lambda m: _arastirma_mesaji(sid, soru, m))
         metin = tarayici.ozetle(soru, sayfalar, model_sor) if sayfalar else ""
         metin = metin or "Araştırdım ama soruya cevap veren okunabilir bir kaynak bulamadım."
     except tarayici.BotKorumasi:
@@ -679,6 +689,24 @@ def bildirimler(sonra: float = 0):
     arastirma = db.oku("""SELECT m.sohbet_id, s.baslik, m.metin FROM asistan_mesaj m JOIN asistan_sohbet s ON s.id=m.sohbet_id
                           WHERE m.rol='tulpar' AND m.eylem LIKE '%arastirma_sonuc%' AND m.zaman>? ORDER BY m.zaman""", sonra)
     return {"zaman": time.time(), "onemli": yeni, "taslaklar": taslak, "onaylar": onay, "arastirmalar": arastirma}
+
+
+@router.get("/ekran")
+def ekran_bilgi():
+    """Görünür tarayıcının noVNC adresi için parola (6080); sadece Tulpar anahtarıyla verilir."""
+    yol = VERI / "ekran-parola"
+    if not yol.exists():
+        subprocess.run(["sudo", "-n", "systemctl", "start", "tulpar-tarayici.service"], timeout=30)  # parolayı üretir
+        time.sleep(3)
+    if not yol.exists():
+        raise HTTPException(503, "tarayıcı servisi kurulu değil")
+    return {"port": 6080, "parola": yol.read_text().strip()}
+
+
+@router.post("/ekran/ac")
+def ekran_ac(govde: dict = Body(default={})):
+    ok = subprocess.run(["sudo", "-n", "systemctl", "start" if govde.get("ac", True) else "stop", "tulpar-tarayici.service"], timeout=30).returncode == 0
+    return {"tamam": ok}
 
 
 # ---------- telefondan terminal ----------

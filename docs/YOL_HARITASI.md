@@ -16,7 +16,7 @@ Sahibinin istekleri ve kararları. Biten işler işaretlenir; yenileri eklendik�
 ## Sıradakiler (sahibinin onayladığı sıra)
 1. **Telefondan bilgisayar**: uygulamada Terminal (HP kabuğu, tmux) ve Ekran (HP ekranını izle/kontrol et)
 2. **Hafıza ("hakkımda")**: ad, hitaplar, sevdikleri, alışkanlıklar, kime nasıl davrandığı; konuşmalardan sürekli öğrenir; uygulamada görüp düzeltilebilir. Model değişse de taşınır.
-3. **Tarayıcı ajanı**: HP ekranında, sahibinin gözü önünde araştırır (Playwright); okunabilen sayfayı metin olarak, okunamayanı ekran görüntüsüyle anlar
+3. **Tarayıcı ajanı** — [x] 2. aşama kuruldu (4 Kasım): `tulpar-tarayici.service` = sanal ekran (Xvfb) + parolalı VNC (x11vnc, yalnız localhost) + noVNC (6080) + Chromium (CDP 9222, yalnız localhost); `core/tarayici.py gorunur_ara()` Playwright'ı CDP ile bağlar, iş bitince servisi kapatır. Bot koruması çıkarsa sohbete/bildirime "Ekran'dan çöz" mesajı düşer, 5 dk beklenir. Uygulamada Bilgisayar > Ekran sekmesi noVNC'yi açar (APK 24). Ayar: `arastirma_gorunur` (1 = HP'de görünür, 0 = Pi'de görünmez; HP açılamazsa Pi'ye düşer). Henüz yok: okunamayan sayfayı ekran görüntüsüyle anlama (Gemma görüntü desteği, madde 9). HP ekranında, sahibinin gözü önünde araştırır (Playwright); okunabilen sayfayı metin olarak, okunamayanı ekran görüntüsüyle anlar
    - Varsayılan Tulpar yapar; çok derin iş veya kuyrukta çok iş varsa Claude Code'a verir, sonucu Tulpar anlatır
    - Hesaplara girişi sahibi kendisi yapar, Tulpar oturumu sadece okur; satın alma, silme yasak
    - İndirme / paket kurma: kaynağı iki kez doğrula (resmî kaynak, imza/checksum, itibar), sonra sahibine sor

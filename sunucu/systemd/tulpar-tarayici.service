@@ -1,0 +1,9 @@
+[Unit]
+Description=Tulpar görünür tarayıcı (sanal ekran + VNC + Chromium; telefondan izlenir)
+After=network-online.target
+
+[Service]
+User=zegemenim
+ExecStart=/usr/local/bin/tulpar-tarayici-ic
+KillMode=control-group
+TimeoutStopSec=15
