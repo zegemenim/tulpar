@@ -18,6 +18,7 @@ export default function Sekmeler() {
     }}>
       <Tabs.Screen name="index" options={{ title: 'Tulpar', tabBarLabel: 'Ana', tabBarIcon: ikon('mic-circle') }} />
       <Tabs.Screen name="whatsapp" options={{ title: 'WhatsApp', tabBarIcon: ikon('chatbubbles') }} />
+      <Tabs.Screen name="ozet" options={{ title: 'Özet', tabBarIcon: ikon('newspaper') }} />
       <Tabs.Screen name="taslaklar" options={{ title: 'Taslaklar', tabBarIcon: ikon('create') }} />
       <Tabs.Screen name="gorevler" options={{ title: 'Görevler', tabBarIcon: ikon('checkbox') }} />
       <Tabs.Screen name="cihazlar" options={{ title: 'Cihazlar', tabBarIcon: ikon('phone-portrait') }} />

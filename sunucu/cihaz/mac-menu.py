@@ -90,7 +90,7 @@ class Menu(rumps.App):
         self.hedef_menu = rumps.MenuItem("Hedef cihaz: mac")
         self.hedef_menu.add(rumps.MenuItem("mac", callback=self.sec))
         self.menu = [
-            "Taslaklar", "Görevler", "Pano geçmişi", None,
+            "Taslaklar", "Görevler", "WhatsApp özeti", "Pano geçmişi", None,
             dugme_satiri("Ses", [("−", "ses_kis"), ("+", "ses_ac"), ("🔇", "sessiz")]),
             dugme_satiri("Parlaklık", [("−", "parlaklik_kis"), ("+", "parlaklik_ac")]),
             dugme_satiri("Müzik", [("⏮", "medya_onceki"), ("⏯", "medya_cal"), ("⏭", "medya_sonraki")]),
@@ -121,12 +121,14 @@ class Menu(rumps.App):
             t = [x for x in hp("/taslaklar") if x.get("durum") == "bekliyor"]
             g = hp("/gorevler")
             p = hp("/pano/gecmis?n=10")
+            oz = hp("/ozet")
         except Exception:  # noqa: BLE001
             self.title = "T!"
             return
         self.title = f"T {len(t)}" if t else "T"
         self._liste("Taslaklar", [f"{x.get('sohbet_adi')}: {str(x.get('ozet', ''))[:45]}" for x in t])
         self._liste("Görevler", [str(x.get("metin"))[:50] for x in g])
+        self._liste("WhatsApp özeti", [("⚠ " if x["cevap_gerekli"] else "") + f"{x['ad']}: {x['ozet']}"[:70] for x in oz.get("sohbetler", [])])
         self._liste("Pano geçmişi", [str(x["metin"]).replace("\n", " ")[:50] for x in p], lambda ad, tam=p: None)
 
     def _liste(self, ad, satirlar, _=None):

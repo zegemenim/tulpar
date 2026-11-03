@@ -98,7 +98,7 @@ def hazirla(kuyruk, sohbet_id, sohbet_adi, gelenler, talimat=None):
     ornek = ornekler(sohbet_id, kart["iliski"])
     try:  # benzer geçmiş durumlar ve yazış alışkanlığı; hata olursa taslak yine hazırlanır
         cift = benzer.benzer_cevaplar(sohbet_id, [m["metin"] for m in gelenler])
-        benzer_bolum = ("\n\nBENZER GEÇMİŞ DURUMLAR (karşı taraf ne yazdı -> sahibi nasıl cevap verdi; ÜSLUBU ve KARARI buradan öğren):\n"
+        benzer_bolum = ("\n\nBENZER GEÇMİŞ DURUMLAR (karşı taraf ne yazdı -> sahibi nasıl cevap verdi; SADECE ÜSLUBU (kelime seçimi, uzunluk, hitap) buradan öğren; KARAR sahibine aittir, bilmediğin kararlar için yine ayrı SEÇENEKLER hazırla):\n"
                         + "\n".join(f"- \"{g[:150]}\" -> \"{c}\"" for g, c in cift) if cift else "")
         benzer_bolum += ("\n" + benzer.uslup_ozeti(sohbet_id)) if benzer.uslup_ozeti(sohbet_id) else ""
     except Exception as e:  # noqa: BLE001

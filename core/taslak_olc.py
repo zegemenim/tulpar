@@ -13,7 +13,8 @@ import taslak
 import llm
 
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 24
-CIKTI = pathlib.Path.home() / "tulpar/veri/eval/taslak-olc.json"
+SADECE_YENI = len(sys.argv) > 2 and sys.argv[2] == "yeni"
+CIKTI = pathlib.Path.home() / ("tulpar/veri/eval/taslak-olc2.json" if SADECE_YENI else "tulpar/veri/eval/taslak-olc.json")
 
 
 def vaka_sec():
@@ -59,10 +60,11 @@ def main():
         temel = (f"{sahip.AD} adlı sahibin örnek mesajları:\n" + "\n".join(f"- {o}" for o in kendi) + "\n")
         son = f"\n\nSon konuşma (bağlam):\n{konusma}\n\nCEVAPLANACAK MESAJ(LAR) — SADECE bunlara cevap ver:\n{gelen_txt}\nBugün: {time.strftime('%Y-%m-%d %A %H:%M', time.localtime(a['zaman']))}"
         cift = benzer.benzer_cevaplar(sid, [m["metin"] for m in gelen], once=a["zaman"])
-        ek = ("\n\nBENZER GEÇMİŞ DURUMLAR (karşı taraf ne yazdı -> sahibi nasıl cevap verdi; ÜSLUBU ve KARARI buradan öğren):\n"
+        ek = ("\n\nBENZER GEÇMİŞ DURUMLAR (karşı taraf ne yazdı -> sahibi nasıl cevap verdi; SADECE ÜSLUBU (kelime seçimi, uzunluk, hitap) buradan öğren; KARAR sahibine aittir, bilmediğin kararlar için yine ayrı SEÇENEKLER hazırla):\n"
               + "\n".join(f"- \"{g[:150]}\" -> \"{c}\"" for g, c in cift)) if cift else ""
         ek += "\n" + benzer.uslup_ozeti(sid)
-        eski, yeni = yaz(temel + son), yaz(temel + ek + son)
+        eski = "-" if SADECE_YENI else yaz(temel + son)
+        yeni = yaz(temel + ek + son)
         gercek = a["metin"]
         puan = lambda x: round(benzer._kosinus(benzer._ngram(x), benzer._ngram(gercek)), 3)  # noqa: E731
         sonuclar.append({"gelen": [m["metin"] for m in gelen], "gercek": gercek, "eski": eski, "yeni": yeni,

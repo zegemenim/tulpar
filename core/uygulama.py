@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 import ayarlar
 import db
 import llm
+import ozet
 import pano
 import sahip
 import cihaz
@@ -171,6 +172,21 @@ def cihaz_bekleyen(hedef: str):
 @router.get("/pano")
 def pano_oku():
     return pano.oku()
+
+
+@router.get("/ozet")
+def ozet_oku():
+    o = ozet.oku()
+    o["hazirlaniyor"] = o.get("hazirlaniyor") and ozet._durum["calisiyor"]
+    return o
+
+
+@router.post("/ozet/yenile")
+def ozet_yenile(govde: dict = Body(default={})):
+    if ozet._durum["calisiyor"]:
+        return {"durum": "zaten hazırlanıyor"}
+    threading.Thread(target=ozet.hazirla, args=(_baglam["kuyruk"], int(govde.get("saat", 24))), daemon=True).start()
+    return {"durum": "başladı"}
 
 
 @router.get("/pano/gecmis")
