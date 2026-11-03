@@ -92,3 +92,29 @@ def uygula(metin):
     if sonuc.startswith("hata"):
         return f"{hedef.capitalize()} cevap vermedi ({sonuc}).", None
     return f"Tamam, {hedef}: {ETIKET[islem]}.", {"tur": "cihaz", "hedef": hedef, "islem": islem, "deger": deger}
+
+
+# ---- cihaz merkezi: herhangi bir cihaz (menü çubuğu, uygulama) herhangi bir cihazı HP üzerinden kontrol eder ----
+_bekleyen = {"telefon": []}  # telefon uygulaması /cihaz/bekleyen ile alıp çalıştırır (APK'da yerel modül gerekir)
+
+
+def liste():
+    try:
+        tanimli = list(json.loads(AYAR.read_text()))
+    except FileNotFoundError:
+        tanimli = []
+    return sorted(set(tanimli) | set(_bekleyen))
+
+
+def komut(hedef, islem, deger=None):
+    """Seçilen cihazda işlemi çalıştırır; telefon için sıraya koyar. Metin sonuç döner."""
+    if hedef in _bekleyen:
+        _bekleyen[hedef] = (_bekleyen[hedef] + [{"islem": islem, "deger": deger}])[-20:]
+        return "telefona iletildi"
+    sonuc = _ajana_gonder(hedef, islem, deger)
+    return f"{hedef} bağlı değil" if sonuc is None else sonuc
+
+
+def bekleyen(hedef):
+    cikan, _bekleyen[hedef] = _bekleyen.get(hedef, []), []
+    return cikan

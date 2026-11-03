@@ -4,9 +4,10 @@ import re
 import time
 
 import ayarlar
+import benzer
 import db
 import sahip
-from kuyruk import Is
+from kuyruk import Is, log
 
 YER_TUTUCU = re.compile(r"\[[^\]]{2,30}\]")  # [fotoğraf], [çıkartma] ...
 SAMIMI = ["kanka", "knk", "kral", "lan", "abi", "moruk", "kardeşim", "kanki", "reis"]
@@ -95,12 +96,21 @@ def hazirla(kuyruk, sohbet_id, sohbet_adi, gelenler, talimat=None):
     gecmis = db.son_mesajlar(sohbet_id, 40)
     kart = kart_getir(kuyruk, sohbet_id, sohbet_adi, gecmis)
     ornek = ornekler(sohbet_id, kart["iliski"])
+    try:  # benzer geçmiş durumlar ve yazış alışkanlığı; hata olursa taslak yine hazırlanır
+        cift = benzer.benzer_cevaplar(sohbet_id, [m["metin"] for m in gelenler])
+        benzer_bolum = ("\n\nBENZER GEÇMİŞ DURUMLAR (karşı taraf ne yazdı -> sahibi nasıl cevap verdi; ÜSLUBU ve KARARI buradan öğren):\n"
+                        + "\n".join(f"- \"{g[:150]}\" -> \"{c}\"" for g, c in cift) if cift else "")
+        benzer_bolum += ("\n" + benzer.uslup_ozeti(sohbet_id)) if benzer.uslup_ozeti(sohbet_id) else ""
+    except Exception as e:  # noqa: BLE001
+        benzer_bolum = ""
+        log(f"benzer durum aranamadi: {type(e).__name__}")
     konusma = "\n".join(f"[{m['id']}] {sahip.AD if m['benden'] else m.get('gonderen_adi') or sohbet_adi}: {m['metin']}"
                         for m in gecmis[-25:])
     istem = (dersler(sohbet_id) +
              f"Kişi kartı: ad={kart.get('ad')}, ilişki={kart['iliski']}, hitap={kart.get('hitap')}, "
              f"sen/siz={kart.get('sen_siz')}, not={kart.get('notlar')}\n"
              f"{sahip.AD} adlı sahibin örnek mesajları:\n" + ("\n".join(f"- {o}" for o in ornek) or "- (henüz yok)") +
+             benzer_bolum +
              f"\n\nSon konuşma (bağlam):\n{konusma}\n\n"
              "CEVAPLANACAK MESAJ(LAR) — SADECE bunlara cevap ver, sohbetteki başka konulara değil:\n"
              + "\n".join(f"[{m['id']}] {m.get('gonderen_adi') or sohbet_adi}: {m['metin']}" for m in gelenler) + "\n"
@@ -125,6 +135,9 @@ def hazirla(kuyruk, sohbet_id, sohbet_adi, gelenler, talimat=None):
                 secenekler.append({"etiket": sec.get("etiket") or "Cevap", "mesajlar": mesajlar})
         tum = [m for sec in secenekler for m in sec["mesajlar"]]
         uyarilar = uslup_kontrol(kart, tum)
+        uydur = benzer.uydurma_var([m["metin"] for m in tum], konusma + " " + " ".join(m["metin"] for m in gelenler))
+        if uydur:
+            uyarilar.append(f"uygunsuz: bağlamda olmayan saat/sayı uydurulmuş ({', '.join(uydur)}); bunları yazma, gerekirse [köşeli parantez] bırak")
         if secenekler and not any("uygunsuz" in u for u in uyarilar):
             break
         istem += ("\n\nÖNCEKİ TASLAK REDDEDİLDİ: " + uyarilar[0] + ". Bu kelimeleri kullanma.") if uyarilar else ""

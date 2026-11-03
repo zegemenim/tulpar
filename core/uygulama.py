@@ -153,6 +153,21 @@ def onay_karar(oid: int, govde: dict = Body(...)):
 
 # ---------- görevler ----------
 
+@router.get("/cihaz/liste")
+def cihaz_liste():
+    return cihaz.liste()
+
+
+@router.post("/cihaz/komut")
+def cihaz_komut(govde: dict = Body(...)):
+    return {"durum": cihaz.komut(str(govde.get("hedef")), str(govde.get("islem")), govde.get("deger"))}
+
+
+@router.get("/cihaz/bekleyen/{hedef}")
+def cihaz_bekleyen(hedef: str):
+    return cihaz.bekleyen(hedef)
+
+
 @router.get("/pano")
 def pano_oku():
     return pano.oku()

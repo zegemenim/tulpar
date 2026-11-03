@@ -21,7 +21,15 @@ def hp(yol, govde=None):
     return json.load(urllib.request.urlopen(r, timeout=6))
 
 
+HEDEF = {"ad": "mac"}  # menüden seçilen cihaz
+
+
 def mac(islem, deger=None):
+    if HEDEF["ad"] != "mac":  # başka cihaz: HP üzerinden gönder
+        try:
+            return hp("/cihaz/komut", {"hedef": HEDEF["ad"], "islem": islem, "deger": deger})["durum"]
+        except Exception as e:  # noqa: BLE001
+            return f"hata: {type(e).__name__}"
     r = urllib.request.Request("http://127.0.0.1:8097/islem", headers={"x-tulpar-anahtar": AJAN_ANAHTAR},
                                data=json.dumps({"islem": islem, "deger": deger}).encode())
     try:
@@ -33,8 +41,10 @@ def mac(islem, deger=None):
 class Menu(rumps.App):
     def __init__(self):
         super().__init__("T", quit_button="Çık")
+        self.hedef_menu = rumps.MenuItem("Hedef cihaz: mac")
+        self.hedef_menu.add(rumps.MenuItem("mac", callback=self.sec))
         self.menu = [
-            "Taslaklar", "Görevler", None,
+            "Taslaklar", "Görevler", None, self.hedef_menu,
             ("Ses", [rumps.MenuItem("Aç", callback=lambda _: mac("ses_ac")), rumps.MenuItem("Kıs", callback=lambda _: mac("ses_kis")),
                      rumps.MenuItem("Sessiz", callback=lambda _: mac("sessiz"))]),
             ("Müzik", [rumps.MenuItem("Duraklat / Oynat", callback=lambda _: mac("medya_cal")),
@@ -47,10 +57,21 @@ class Menu(rumps.App):
             None,
         ]
 
+    def sec(self, oge):
+        HEDEF["ad"] = oge.title
+        self.hedef_menu.title = f"Hedef cihaz: {oge.title}"
+
     @rumps.timer(30)
     def yenile(self, _=None):
         if HP is None:
             return
+        try:
+            alt = self.hedef_menu
+            for ad in hp("/cihaz/liste"):
+                if ad not in alt:
+                    alt.add(rumps.MenuItem(ad, callback=self.sec))
+        except Exception:  # noqa: BLE001
+            pass
         try:
             t = hp("/onaylar")
             g = hp("/gorevler")
