@@ -3,7 +3,7 @@
 // kullanıcının bir kez "Cihazlarım" ekranından izin vermesi gerekir.
 const fs = require('fs');
 const path = require('path');
-const { withAndroidManifest, withDangerousMod } = require('expo/config-plugins');
+const { withAndroidManifest, withDangerousMod, withMainActivity } = require('expo/config-plugins');
 
 const KOTLIN = (p) => `package ${p}
 
@@ -93,19 +93,61 @@ object CihazKomutu {
 }
 `;
 
+const SERVIS = (p) => `package ${p}
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Service
+import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
+import android.os.IBinder
+
+// Uygulama açılınca (ön plandayken) başlar ve komut sırasını sürekli dinler. Ayrı servis: uyandırma servisi arka planda
+// yeniden başlatılamadığı için (Android mikrofon servisine izin vermiyor) komutlar ona bağlı olamaz.
+class CihazServisi : Service() {
+  override fun onBind(i: Intent?): IBinder? = null
+
+  override fun onStartCommand(i: Intent?, f: Int, id: Int): Int {
+    val nm = getSystemService(NotificationManager::class.java)
+    nm.createNotificationChannel(NotificationChannel("cihaz", "Cihaz komutları", NotificationManager.IMPORTANCE_MIN))
+    val n = Notification.Builder(this, "cihaz").setSmallIcon(android.R.drawable.ic_menu_manage)
+      .setContentTitle("Tulpar cihaz kontrolü").setContentText("Bilgisayardan gelen komutlar dinleniyor").build()
+    if (Build.VERSION.SDK_INT >= 34) startForeground(43, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE) else startForeground(43, n)
+    CihazKomutu.baslat(this)
+    return START_STICKY
+  }
+}
+`;
+
 module.exports = function cihaz(config) {
   const paket = config.android.package;
   config = withDangerousMod(config, ['android', async (c) => {
     const klasor = path.join(c.modRequest.platformProjectRoot, 'app/src/main/java', ...paket.split('.'));
     fs.mkdirSync(klasor, { recursive: true });
     fs.writeFileSync(path.join(klasor, 'CihazKomutu.kt'), KOTLIN(paket));
+    fs.writeFileSync(path.join(klasor, 'CihazServisi.kt'), SERVIS(paket));
     return c;
   }]);
+  config = withMainActivity(config, (c) => {
+    const kod = 'startForegroundService(android.content.Intent(this, CihazServisi::class.java))';
+    if (!c.modResults.contents.includes('CihazServisi')) {
+      c.modResults.contents = c.modResults.contents.replace(/(super\.onCreate\([^)]*\)\n)/, `$1    ${kod}\n`);
+    }
+    return c;
+  });
   return withAndroidManifest(config, (c) => {
     const m = c.modResults.manifest;
     m['uses-permission'] = m['uses-permission'] || [];
-    for (const izin of ['android.permission.MODIFY_AUDIO_SETTINGS', 'android.permission.WRITE_SETTINGS', 'android.permission.ACCESS_NOTIFICATION_POLICY']) {
+    for (const izin of ['android.permission.FOREGROUND_SERVICE', 'android.permission.FOREGROUND_SERVICE_SPECIAL_USE', 'android.permission.MODIFY_AUDIO_SETTINGS', 'android.permission.WRITE_SETTINGS', 'android.permission.ACCESS_NOTIFICATION_POLICY']) {
       if (!m['uses-permission'].some((x) => x.$['android:name'] === izin)) m['uses-permission'].push({ $: { 'android:name': izin } });
+    }
+    const app = m.application[0];
+    app.service = app.service || [];
+    if (!app.service.some((x) => x.$['android:name'] === '.CihazServisi')) {
+      app.service.push({ $: { 'android:name': '.CihazServisi', 'android:exported': 'false', 'android:foregroundServiceType': 'specialUse' },
+        property: [{ $: { 'android:name': 'android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE', 'android:value': 'remote_device_control' } }] });
     }
     return c;
   });

@@ -13,6 +13,10 @@ ANAHTAR = (pathlib.Path.home() / ".tulpar-ajan/anahtar").read_text().strip()
 YTM = "music.youtube.com"
 
 
+def chrome_acik():  # kapalı uygulamaya "tell" göndermek onu açar; önce çalışıyor mu bak
+    return subprocess.run(["pgrep", "-x", "Google Chrome"], capture_output=True).returncode == 0
+
+
 def osa(kod):
     return subprocess.run(["osascript", "-e", kod], capture_output=True, text=True, timeout=20)
 
@@ -23,6 +27,8 @@ def ses_oku():
 
 def ytm_js(js):
     """Açık YouTube Music sekmesinde JavaScript çalıştırır (Chrome)."""
+    if not chrome_acik():
+        return "yok"
     kod = f'''tell application "Google Chrome"
   repeat with w in windows
     repeat with t in tabs of w
@@ -55,6 +61,8 @@ def medya_tusu(ad):
 
 def ytm_sekmesi_var():
     """Chrome'da YouTube Music sekmesi açık mı (JavaScript izni gerekmez)?"""
+    if not chrome_acik():
+        return False
     r = osa(f'''tell application "Google Chrome"
   repeat with w in windows
     repeat with t in tabs of w
@@ -66,7 +74,14 @@ end tell''')
     return r.stdout.strip() == "var"
 
 
+def zen_acik():
+    return subprocess.run(["pgrep", "-x", "zen"], capture_output=True).returncode == 0
+
+
 def medya(js, tus):
+    # Zen (Firefox tabanlı) betikle kontrol edilemez: Chrome'da YouTube Music yoksa ve Zen açıksa sistem medya tuşu kullanılır
+    if not ytm_sekmesi_var() and zen_acik():
+        return medya_tusu(tus)
     sonuc = ytm_js(js)
     if sonuc == "js_izni_yok":
         if ytm_sekmesi_var():
@@ -78,6 +93,9 @@ def medya(js, tus):
 
 
 def ytm_ac_ve_devam():
+    if not ytm_sekmesi_var() and zen_acik():
+        subprocess.run(["open", "-a", "Zen", "https://" + YTM], capture_output=True)
+        return "Zen'de YouTube Music açıldı; ilk seferde oynat düğmesine bir kez bas (sonra tuş komutları çalışır)"
     durum = ytm_js("1")
     if durum == "js_izni_yok":
         return "Chrome'da Görünüm > Geliştirici > Apple Events'ten JavaScript'e İzin Ver açılmalı"
