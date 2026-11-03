@@ -82,6 +82,9 @@ export default function Cihazlar() {
           <Text style={{ color: r.yazi }}>Rahatsız etme izni</Text>
         </Pressable>
       </View>
+      <Pressable onPress={() => ayar('android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS', 'package:dev.tulpar.app')} style={[s.dugme, { backgroundColor: r.kart, borderColor: r.cizgi, alignSelf: 'flex-start' }]}>
+        <Text style={{ color: r.yazi }}>Pil kısıtını kaldır (komutlar arka planda çalışsın)</Text>
+      </Pressable>
     </ScrollView>
   );
 }

@@ -121,6 +121,21 @@ class CihazServisi : Service() {
 }
 `;
 
+const ALICI = (p) => `package ${p}
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.util.Log
+
+// Telefon açılınca ve uygulama güncellenince komut servisini yeniden başlatır (uygulamayı elle açmak gerekmesin).
+class CihazAlici : BroadcastReceiver() {
+  override fun onReceive(c: Context, i: Intent) {
+    try { c.startForegroundService(Intent(c, CihazServisi::class.java)) } catch (e: Exception) { Log.w("Tulpar", "cihaz servisi başlatılamadı: " + e.message) }
+  }
+}
+`;
+
 module.exports = function cihaz(config) {
   const paket = config.android.package;
   config = withDangerousMod(config, ['android', async (c) => {
@@ -128,6 +143,7 @@ module.exports = function cihaz(config) {
     fs.mkdirSync(klasor, { recursive: true });
     fs.writeFileSync(path.join(klasor, 'CihazKomutu.kt'), KOTLIN(paket));
     fs.writeFileSync(path.join(klasor, 'CihazServisi.kt'), SERVIS(paket));
+    fs.writeFileSync(path.join(klasor, 'CihazAlici.kt'), ALICI(paket));
     return c;
   }]);
   config = withMainActivity(config, (c) => {
@@ -140,7 +156,7 @@ module.exports = function cihaz(config) {
   return withAndroidManifest(config, (c) => {
     const m = c.modResults.manifest;
     m['uses-permission'] = m['uses-permission'] || [];
-    for (const izin of ['android.permission.FOREGROUND_SERVICE', 'android.permission.FOREGROUND_SERVICE_SPECIAL_USE', 'android.permission.MODIFY_AUDIO_SETTINGS', 'android.permission.WRITE_SETTINGS', 'android.permission.ACCESS_NOTIFICATION_POLICY']) {
+    for (const izin of ['android.permission.RECEIVE_BOOT_COMPLETED', 'android.permission.FOREGROUND_SERVICE', 'android.permission.FOREGROUND_SERVICE_SPECIAL_USE', 'android.permission.MODIFY_AUDIO_SETTINGS', 'android.permission.WRITE_SETTINGS', 'android.permission.ACCESS_NOTIFICATION_POLICY']) {
       if (!m['uses-permission'].some((x) => x.$['android:name'] === izin)) m['uses-permission'].push({ $: { 'android:name': izin } });
     }
     const app = m.application[0];
@@ -148,6 +164,11 @@ module.exports = function cihaz(config) {
     if (!app.service.some((x) => x.$['android:name'] === '.CihazServisi')) {
       app.service.push({ $: { 'android:name': '.CihazServisi', 'android:exported': 'false', 'android:foregroundServiceType': 'specialUse' },
         property: [{ $: { 'android:name': 'android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE', 'android:value': 'remote_device_control' } }] });
+    }
+    app.receiver = app.receiver || [];
+    if (!app.receiver.some((x) => x.$['android:name'] === '.CihazAlici')) {
+      app.receiver.push({ $: { 'android:name': '.CihazAlici', 'android:exported': 'true' },
+        'intent-filter': [{ action: [{ $: { 'android:name': 'android.intent.action.BOOT_COMPLETED' } }, { $: { 'android:name': 'android.intent.action.MY_PACKAGE_REPLACED' } }] }] });
     }
     return c;
   });

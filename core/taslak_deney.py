@@ -17,7 +17,7 @@ import sahip
 import taslak
 
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 14
-AZAMI_SN = float(sys.argv[2]) * 3600 if len(sys.argv) > 2 else 7.5 * 3600
+AZAMI_SN = float(sys.argv[2]) * 3600 if len(sys.argv) > 2 else 7.5 * 3600  # (içe aktarılınca da okunur; ikinci tur kendi argümanlarını kullanır)
 KLASOR = pathlib.Path.home() / "tulpar/veri/eval"
 CIKTI = KLASOR / "deney.json"
 PROFIL = KLASOR / "uslup-profil.txt"
@@ -26,6 +26,10 @@ BASLA = time.time()
 
 
 def vaka_sec():
+    return vaka_sec_n(N)
+
+
+def vaka_sec_n(n_):
     r = random.Random(7)
     adaylar = db.oku("""SELECT m.id, m.sohbet_id, m.metin, m.zaman FROM mesajlar m WHERE m.benden=1 AND length(m.metin) BETWEEN 3 AND 150
                         AND m.zaman < strftime('%s','now') - 86400 AND m.grup=0 AND m.metin NOT LIKE '[%' AND m.metin NOT LIKE '%http%'""")
@@ -43,7 +47,7 @@ def vaka_sec():
         if gelen and len(onceki) >= 15 and sum(m["benden"] for m in onceki) >= 4:
             sonuc.append((a, onceki, gelen))
             gorulen.add(a["sohbet_id"])
-        if len(sonuc) >= N:
+        if len(sonuc) >= n_:
             break
     return sonuc
 
@@ -194,4 +198,5 @@ def main():
 
 
 PROFIL_METNI = ""
-main()
+if __name__ == "__main__":
+    main()
