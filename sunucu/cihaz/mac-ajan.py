@@ -216,24 +216,18 @@ def islem(ad, deger):
         osa(f"set volume output volume {max(0, min(int(deger), 100))}")
     elif ad == "sessiz":
         osa("set volume with output muted")
-    elif ad in ("medya_dur", "medya_cal"):
-        if ad == "medya_cal":
-            if mod() == "sistem":
-                return medya_oynat_durdur()
-            if not ses_caliyor():  # Chrome modu: çalmıyorsa başlat (oynatıcı yoksa geçmişten son çalınan)
-                return _chrome_devam()
-        return medya("document.querySelector('#play-pause-button').click()", "cal")
-    elif ad in ("muzik_chrome", "muzik_sistem"):
-        MOD_DOSYA.write_text(ad.split("_")[1])
-        return "müzik kaynağı: " + ad.split("_")[1]
-    elif ad == "sarki_cal":
-        return ytm_sarki_cal(deger)
+    elif ad == "medya_dur":
+        return medya_tusu("cal")  # klavyedeki oynat/durdur tuşu: çalan oturumu durdurur
+    elif ad == "medya_cal":  # birleşik oynat/duraklat düğmesi
+        if mod() == "sistem":
+            return medya_oynat_durdur()
+        return medya_tusu("cal") if ses_caliyor() else _chrome_devam()
     elif ad == "medya_devam":
         return ytm_ac_ve_devam()
     elif ad == "medya_sonraki":
-        return medya("document.querySelector('.next-button').click()", "sonraki")
+        return medya_tusu("sonraki")
     elif ad == "medya_onceki":
-        return medya("document.querySelector('.previous-button').click()", "onceki")
+        return medya_tusu("onceki")
     elif ad == "parlaklik_ac":
         tus(144)  # klavyedeki tek basış gibi: tek adım
     elif ad == "parlaklik_kis":
