@@ -121,16 +121,31 @@ def ses_caliyor():
 
 
 def ytm_ac_ve_devam():
+    """'Devam / çal': zaten çalıyorsa dokunmaz (tuş durdururdu); değilse klavyedeki oynat tuşu gibi basar, 3 sn sonra hâlâ
+    çalmıyorsa YouTube Music'i Chrome'dan başlatır."""
     if mod() == "sistem":
-        sonuc = medya_tusu("cal")  # önce sistem tuşu: en son çalan oturumu sürdürür
-        if sonuc.startswith("Erişilebilirlik"):
-            return sonuc
-        time.sleep(3)
         if ses_caliyor():
-            return sonuc
-        # tuş bir şey başlatmadı (açık oturum yok): YouTube Music'i açıp son çalınanı başlatmayı dene
-        return _chrome_devam()
+            return "zaten çalıyor"
+        return _tus_sonra_chrome()
     return _chrome_devam()
+
+
+def _tus_sonra_chrome():
+    sonuc = medya_tusu("cal")
+    if sonuc.startswith("Erişilebilirlik"):
+        return sonuc
+    time.sleep(3)
+    return sonuc if ses_caliyor() else _chrome_devam()
+
+
+def medya_oynat_durdur():
+    """Sistem modunda ⏯ düğmesi: klavyedeki oynat/durdur tuşuna basmak gibi. Başlatmayı hedefliyorsa ve bir şey çalmadıysa Chrome'a atar."""
+    caliyordu = ses_caliyor()
+    sonuc = medya_tusu("cal")
+    if caliyordu or sonuc.startswith("Erişilebilirlik"):
+        return sonuc  # çalan şey durduruldu
+    time.sleep(3)
+    return sonuc if ses_caliyor() else _chrome_devam()
 
 
 def _klavye_devam():
@@ -163,13 +178,24 @@ end tell''')
 
 
 def _chrome_devam():
+    """Chrome'da YouTube Music: oynatıcı varsa oynatır; yoksa (sayfa açılışta son çalınanı geri yüklemiyor) Geçmiş'teki
+    en son şarkıyı başlatır."""
     if not ytm_sekmesi_var():
         osa(f'tell application "Google Chrome" to open location "https://{YTM}"')
-        time.sleep(8)  # sayfa ve son çalınan yüklensin
-    sonuc = ytm_js("(document.querySelector('#play-pause-button').title||'').toLowerCase().includes('oynat')||(document.querySelector('#play-pause-button').title||'').toLowerCase().includes('play')?(document.querySelector('#play-pause-button').click(),'baslatildi'):'zaten calisiyor'")
-    if sonuc == "js_izni_yok":
+        time.sleep(8)
+    durum = ytm_js("document.querySelector('#play-pause-button') ? 'oynatici' : 'yok'")
+    if durum == "js_izni_yok":
         return _klavye_devam()  # Chrome betik izni kapalı: klavye yöntemi
-    return sonuc or "tamam"
+    if durum == "oynatici":
+        ytm_js("(function(){var v=document.querySelector('video'); if(v&&v.paused){document.querySelector('#play-pause-button').click();}})()")
+        return "baslatildi"
+    ytm_js("location.href='https://" + YTM + "/history'")
+    for _ in range(24):  # geçmiş listesi yüklenince hemen devam (en fazla ~12 sn)
+        time.sleep(0.5)
+        if ytm_js("document.querySelectorAll('ytmusic-responsive-list-item-renderer').length > 0 ? 'hazir' : 'bekle'") == "hazir":
+            break
+    ytm_js("(function(){var i=document.querySelector('ytmusic-responsive-list-item-renderer'); if(i){(i.querySelector('ytmusic-play-button-renderer, #play-button')||i).click();}})()")
+    return "baslatildi (son çalınan: geçmişten)"
 
 
 def tus(kod):  # parlaklık tuşları: 144 artır, 145 azalt (Erişilebilirlik izni gerekir)
@@ -191,6 +217,11 @@ def islem(ad, deger):
     elif ad == "sessiz":
         osa("set volume with output muted")
     elif ad in ("medya_dur", "medya_cal"):
+        if ad == "medya_cal":
+            if mod() == "sistem":
+                return medya_oynat_durdur()
+            if not ses_caliyor():  # Chrome modu: çalmıyorsa başlat (oynatıcı yoksa geçmişten son çalınan)
+                return _chrome_devam()
         return medya("document.querySelector('#play-pause-button').click()", "cal")
     elif ad in ("muzik_chrome", "muzik_sistem"):
         MOD_DOSYA.write_text(ad.split("_")[1])
