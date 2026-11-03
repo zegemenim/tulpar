@@ -133,14 +133,42 @@ def ytm_ac_ve_devam():
     return _chrome_devam()
 
 
+def _klavye_devam():
+    """JavaScript izni yokken: YouTube Music sekmesini öne alıp Boşluk tuşuyla oynatır (Erişilebilirlik izni gerekir)."""
+    if not erisilebilirlik_izni():
+        return "Erişilebilirlik izni yok"
+    if not ytm_sekmesi_var():
+        osa(f'tell application "Google Chrome" to open location "https://{YTM}"')
+        time.sleep(8)
+    osa(f'''tell application "Google Chrome"
+  activate
+  repeat with w in windows
+    set i to 0
+    repeat with t in tabs of w
+      set i to i + 1
+      if URL of t contains "{YTM}" then
+        set active tab index of w to i
+        set index of w to 1
+        return
+      end if
+    end repeat
+  end repeat
+end tell''')
+    time.sleep(1)
+    onde = osa('tell application "System Events" to return name of first application process whose frontmost is true').stdout.strip()
+    if onde != "Google Chrome":
+        return f"Chrome öne alınamadı ({onde})"
+    osa('tell application "System Events" to keystroke " "')  # YouTube Music'te Boşluk: oynat/duraklat
+    return "tamam (klavye)"
+
+
 def _chrome_devam():
-    durum = ytm_js("1")
-    if durum == "js_izni_yok":
-        return "Chrome'da Görünüm > Geliştirici > Apple Events'ten JavaScript'e İzin Ver açılmalı"
-    if durum == "yok":
+    if not ytm_sekmesi_var():
         osa(f'tell application "Google Chrome" to open location "https://{YTM}"')
         time.sleep(8)  # sayfa ve son çalınan yüklensin
     sonuc = ytm_js("(document.querySelector('#play-pause-button').title||'').toLowerCase().includes('oynat')||(document.querySelector('#play-pause-button').title||'').toLowerCase().includes('play')?(document.querySelector('#play-pause-button').click(),'baslatildi'):'zaten calisiyor'")
+    if sonuc == "js_izni_yok":
+        return _klavye_devam()  # Chrome betik izni kapalı: klavye yöntemi
     return sonuc or "tamam"
 
 
