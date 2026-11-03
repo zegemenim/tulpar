@@ -15,6 +15,7 @@ import db
 import llm
 import ozet
 import bildirim
+import claude_kod
 import pano
 import sahip
 import cihaz
@@ -141,15 +142,41 @@ def onay_karar(oid: int, govde: dict = Body(...)):
         db.yaz("INSERT INTO gorevler (metin,zaman,kaynak,olusturma) VALUES (?,?,?,?)",
                o["baslik"].removeprefix("Takvime ekle: "), zaman, f"onay #{oid}", time.time())
     if karar == "onay" and o["tur"] == "claude_gorev":
-        log(f"Claude gorevi onaylandi #{oid} (Claude Code kopru henuz yok, gorev listesine eklendi)")
-        db.yaz("INSERT INTO gorevler (metin,zaman,kaynak,olusturma) VALUES (?,?,?,?)",
-               o["baslik"].removeprefix("İş isteği: "), None, f"onay #{oid}", time.time())
+        v = json.loads(o["veri"] or "{}")
+        if v.get("klasor"):  # konuşmadan gelen iş: proje ve konuşma seçilmiş, Mac'te başlat
+            durum = claude_kod.baslat(v, v.get("sohbet"), oid)
+            if not str(durum).startswith("baslatildi"):
+                raise HTTPException(502, f"Claude Code başlatılamadı: {durum}")
+        else:  # WhatsApp'tan gelen iş isteği: şimdilik görev listesine
+            db.yaz("INSERT INTO gorevler (metin,zaman,kaynak,olusturma) VALUES (?,?,?,?)",
+                   o["baslik"].removeprefix("İş isteği: "), None, f"onay #{oid}", time.time())
     if karar == "onay" and o["tur"] == "taslak_teklif":
         mesaj = db.oku("SELECT * FROM mesajlar WHERE id=?", o["mesaj_id"])
         if mesaj:
             threading.Thread(target=_baglam["taslak_hazirla"], args=(mesaj[0],), daemon=True).start()
             log(f"taslak isteniyor (onay #{oid}): {o['sohbet_adi']}")
     log(f"onay #{oid} {durum}")
+    return {"tamam": True}
+
+
+@router.get("/claude/projeler")
+def claude_projeler():
+    return claude_kod.projeler(taze=True)
+
+
+@router.post("/claude/sonuc")
+def claude_sonuc(govde: dict = Body(...)):
+    """Mac'teki Claude Code işi bitince sonucu gönderir; ilgili sohbete Tulpar mesajı olarak yazılır."""
+    sid = govde.get("sohbet")
+    if not sid or not db.oku("SELECT id FROM asistan_sohbet WHERE id=?", sid):
+        sid = db.yaz("INSERT INTO asistan_sohbet (baslik, olusturma, guncel) VALUES (?,?,?)",
+                     f"Claude Code: {govde.get('proje')}", time.time(), time.time())
+    dk = max(1, round(int(govde.get("sure") or 0) / 60))
+    baslik = f"Claude Code ({govde.get('proje')}, {dk} dk) " + ("işi tamamlayamadı:" if govde.get("hata") else "bitirdi:")
+    db.yaz("INSERT INTO asistan_mesaj (sohbet_id, rol, metin, eylem, zaman) VALUES (?,?,?,?,?)", sid, "tulpar",
+           f"{baslik}\n{govde.get('sonuc') or '(boş cevap)'}", json.dumps({"tur": "arastirma_sonuc", "id": sid}), time.time())
+    db.yaz("UPDATE asistan_sohbet SET guncel=? WHERE id=?", time.time(), sid)
+    log(f"CLAUDE CODE BİTTİ | {govde.get('proje')} | {dk} dk | hata={govde.get('hata')}")
     return {"tamam": True}
 
 
@@ -465,8 +492,16 @@ def _arac_uygula(metin, dogrudan=False, gecmis=None, sid=None):
         eylem = {"tur": "ekran", "id": 0}
         log(f"ikinci ekran {islem}: {sonuc.returncode}")
     elif arac == "claude_code":
-        oid = onay_ekle("claude_gorev", f"İş: {p.get('gorev_tanimi') or metin}"[:200], metin)
-        eylem = {"tur": "onay", "id": oid}
+        h = claude_kod.hazirla(metin, p.get("proje"), lambda s, i: k.ekle(Is("komut", s, i, aciklama=f"Claude Code projesi: {metin[:50]}")).bekle(180))
+        if h.get("hata"):
+            ek = f"\nClaude Code işi başlatılamadı: {h['hata']} Bunu sahibine kısaca söyle."
+        else:
+            konusma = f"'{h['oturum_baslik']}' konuşmasını sürdürür" if h["oturum"] else "yeni bir konuşma açar"
+            oid = onay_ekle("claude_gorev", f"Claude Code → {h['proje']} ({'inceleme' if h['mod'] == 'plan' else 'düzenleme'}): {h['gorev']}"[:200],
+                            f"Klasör: {h['klasor']}. {konusma}. Push/silme/sudo yasak; bitince sonucu buraya yazar.", veri={**h, "sohbet": sid})
+            eylem = {"tur": "onay", "id": oid}
+            ek = (f"\nClaude Code işi onayına sunuldu (proje: {h['proje']}, {konusma}). Sahibine onay kartından onaylamasını söyle; "
+                  "onaylayınca iş Mac'te başlar ve bitince sonucu bu sohbete yazarım. İşi yaptım DEME.")
     elif arac == "arastirma":
         soru = (p.get("soru") or metin).strip()
         threading.Thread(target=_arastir, args=(soru, sid), daemon=True).start()

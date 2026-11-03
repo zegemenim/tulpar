@@ -2,7 +2,7 @@
 # Mac'e Tulpar cihaz ajanını kurar (LaunchAgent: oturum açılınca başlar). Anahtar ~/.tulpar-ajan/anahtar'a yazılır.
 set -e
 KLASOR="$HOME/.tulpar-ajan"; mkdir -p "$KLASOR"; chmod 700 "$KLASOR"
-cp "$(dirname "$0")/mac-ajan.py" "$KLASOR/mac-ajan.py"
+cp "$(dirname "$0")/mac-ajan.py" "$(dirname "$0")/claude_kopru.py" "$KLASOR/"
 [ -f "$KLASOR/anahtar" ] || (python3 -c "import secrets;print(secrets.token_hex(24))" > "$KLASOR/anahtar"; chmod 600 "$KLASOR/anahtar")
 PLIST="$HOME/Library/LaunchAgents/com.tulpar.ajan.plist"
 cat > "$PLIST" <<P

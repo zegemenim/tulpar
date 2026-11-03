@@ -2,6 +2,7 @@
 """Tulpar cihaz ajanı (Mac): HP'den gelen basit komutları (ses, müzik, parlaklık, rahatsız etme) uygular.
 Sadece anahtarla, port 8097. Hiçbir komut dışarıdan gelen metni kabuğa vermez: işlemler sabit listedir.
 YouTube Music kontrolü için Chrome'da: Görünüm > Geliştirici > "Apple Events'ten JavaScript'e İzin Ver" açık olmalı."""
+import claude_kopru
 import hmac
 import json
 import pathlib
@@ -235,6 +236,11 @@ def islem(ad, deger):
         return kisayol("Tulpar Rahatsız Etme Aç")
     elif ad == "rahatsiz_etme_kapat":
         return kisayol("Tulpar Rahatsız Etme Kapat")
+    elif ad == "claude_projeler":  # Claude Code projeleri ve son konuşmaları (JSON metin)
+        return json.dumps(claude_kopru.projeler(), ensure_ascii=False)
+    elif ad == "claude_kod" and isinstance(deger, dict):
+        hp = pathlib.Path.home() / ".tulpar-ajan/hp.json"
+        return claude_kopru.baslat(deger, json.loads(hp.read_text()) if hp.exists() else None)
     else:
         return "bu işlem Mac'te desteklenmiyor"
     return "tamam"
@@ -248,7 +254,7 @@ class Is(BaseHTTPRequestHandler):
         govde, kod = {"durum": "yetkisiz"}, 401
         if self.path == "/islem" and hmac.compare_digest(self.headers.get("x-tulpar-anahtar", ""), ANAHTAR):
             try:
-                v = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length", "0")), 2000)))
+                v = json.loads(self.rfile.read(min(int(self.headers.get("Content-Length", "0")), 12000)))
                 govde, kod = {"durum": islem(str(v.get("islem")), v.get("deger"))}, 200
             except Exception as e:  # noqa: BLE001
                 govde, kod = {"durum": f"hata: {type(e).__name__}"}, 500

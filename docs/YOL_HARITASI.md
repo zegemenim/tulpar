@@ -21,7 +21,8 @@ Sahibinin istekleri ve kararları. Biten işler işaretlenir; yenileri eklendik�
    - Hesaplara girişi sahibi kendisi yapar, Tulpar oturumu sadece okur; satın alma, silme yasak
    - İndirme / paket kurma: kaynağı iki kez doğrula (resmî kaynak, imza/checksum, itibar), sonra sahibine sor
    - Bot koruması (CAPTCHA) çıkarsa: bildirim gönder, sahibi telefondan Ekran sayfasında çözer, Tulpar devam eder
-4. **Claude Code köprüsü**: HP'de Claude Code (Pro), `claude_kod(görev, klasör)` aracı; projeleri çalıştırıp test eder, GitHub'dan çeker; silme/yayın/push öncesi sorar; Pro limitini %80'de uyarır, %20 önemli işlere
+4. **Claude Code köprüsü** — [x] kuruldu (4 Kasım): Claude Code Mac'te çalışır (projeler ve konuşmalar orada), HP seçimi yapar. `sunucu/cihaz/claude_kopru.py` (Mac ajanı): ~/Documents/Projects altındaki projeleri + son 5 konuşmayı listeler, işi `claude -p --resume` ile arka planda çalıştırır (konuşma son 10 dk içinde kullanıldıysa `--fork-session`: açık konuşmanın üstüne yazılmaz), push/silme/sudo/curl yasak, 30 dk sınır. `core/claude_kod.py`: proje adı geçerse o, yoksa model seçer; konuşma başlıkla örtüşen ya da en son, "yeni konuşma" denirse sıfırdan; inceleme soruları `plan` (dosya değiştirmez). Konuşmadan gelen iş onay kartına düşer, onaylanınca Mac'te başlar, sonuç `/claude/sonuc` ile sohbete yazılır. Not: Mac kapalıysa çalışmaz.
+   Eski plan: HP'de Claude Code (Pro), `claude_kod(görev, klasör)` aracı; projeleri çalıştırıp test eder, GitHub'dan çeker; silme/yayın/push öncesi sorar; Pro limitini %80'de uyarır, %20 önemli işlere
 5. **Telefon bildirimleri ve SMS okuma**; OTP kodları saklanmaz
    - [x] Sunucu: `core/bildirim.py`, `POST/GET /bildirim` (30 gün, OTP süzgeci, tekrar yok sayma, testli); HP'ye kuruldu
    - [x] Uygulama: `BildirimDinleyici` (WhatsApp ve kalıcı bildirimler atlanır, SMS uygulamasından gelenler `sms` türü), Cihazlar sekmesinde "Bildirim erişimi" düğmesi → APK 23'te (toplu derleme)
