@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AudioModule, createAudioPlayer, RecordingPresets, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
 import { File } from 'expo-file-system';
 import * as Speech from 'expo-speech';
+import { VolumeManager } from 'react-native-volume-manager';
 import * as Haptics from 'expo-haptics';
 import * as SecureStore from 'expo-secure-store';
 import { konusAkis, sentezle, sesGonder, sesiIsit } from './api';
@@ -32,6 +33,11 @@ function cal(uri: string): Promise<void> {
     p.play();
     setTimeout(son, 60000);  // güvenlik: takılırsa sırayı bırak
   });
+}
+
+// Telefonun medya sesi kapalıysa (≈0) cevap sesli okunmaz, sadece yazılır; ses okunamazsa açık sayılır.
+async function sesAcikMi(): Promise<boolean> {
+  try { return (await VolumeManager.getVolume()).volume > 0.02; } catch { return true; }
 }
 
 export function sesliOku(cumle: string) {
@@ -81,7 +87,8 @@ export function useSesliAsistan(eklendi: (k: Konusma) => void, guncellendi?: (me
 
   /** Yazılı veya sesten çıkan metni Tulpar'a sorar. Cevap akarken gösterilir; sesli sorularda cümle cümle
    *  hemen okunmaya başlanır (bütün cevabı beklemeden). */
-  const sor = useCallback(async (metin: string, sesliCevap: boolean) => {
+  const sor = useCallback(async (metin: string, sesliIstek: boolean) => {
+    const sesliCevap = sesliIstek && (await sesAcikMi());
     eklendi({ kim: 'ben', metin });
     setDurum('dusunuyor');
     let tum = '';

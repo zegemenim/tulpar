@@ -38,7 +38,7 @@ Sahibinin istekleri ve kararları. Biten işler işaretlenir; yenileri eklendik�
 - Taslaklarda çıkartma: sık kullanılan / favori çıkartmalardan seçip gönderebilsin, taslakta görünsün
 - Tepki (emoji reaksiyon): önce hangi mesaja hangi tepki ve bağlamı anlatıp onay alsın
 - [x] Ana ekranda Tulpar'ın cevabının altında hızlı cevap düğmeleri (Daha kısa söyle / Devam et / Bunu göreve ekle / Neden?) — APK 23
-- Sesli okuma sadece telefonun sesi açıkken
+- [x] Sesli okuma sadece telefonun sesi açıkken (`react-native-volume-manager`, medya sesi ≈0 ise sadece yazı) — APK 23
 - Uzak ekran (isteğe bağlı; terminal öncelikli)
 
 ## Telefon asistanı (planlanan)
