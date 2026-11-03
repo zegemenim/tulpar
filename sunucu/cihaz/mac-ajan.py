@@ -6,6 +6,7 @@ import hmac
 import json
 import pathlib
 import subprocess
+import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -64,8 +65,21 @@ tus(KOD, true); tus(KOD, false);"""
 TUSLAR = {"cal": 16, "sonraki": 17, "onceki": 18}
 
 
+def erisilebilirlik_izni():
+    """Bu işlemin (ajanı çalıştıran python) Erişilebilirlik izni var mı? Yoksa medya tuşları sessizce düşer."""
+    import ctypes
+    try:
+        lib = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices")
+        lib.AXIsProcessTrusted.restype = ctypes.c_bool
+        return bool(lib.AXIsProcessTrusted())
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def medya_tusu(ad):
     """Sistem medya tuşu (Chrome JavaScript izni gerekmez; çalan YouTube Music sekmesi tuşu alır)."""
+    if not erisilebilirlik_izni():
+        return f"Erişilebilirlik izni yok: Sistem Ayarları > Gizlilik ve Güvenlik > Erişilebilirlik'e {sys.executable} eklenmeli"
     subprocess.run(["osascript", "-l", "JavaScript", "-e", JXA_TUS.replace("KOD", str(TUSLAR[ad]))], capture_output=True, timeout=10)
     return "tamam (medya tuşu)"
 
@@ -100,9 +114,26 @@ def medya(js, tus):
     return sonuc or "tamam"
 
 
+def ses_caliyor():
+    """Mac'te şu an bir uygulama ses çalıyor mu? (güç yönetimi 'ses çalıyor' kaydından)"""
+    cikti = subprocess.run(["pmset", "-g", "assertions"], capture_output=True, text=True).stdout.lower()
+    return "playing audio" in cikti or "audio-out" in cikti
+
+
 def ytm_ac_ve_devam():
     if mod() == "sistem":
-        return medya_tusu("cal")  # en son çalınanı başlatır/sürdürür
+        sonuc = medya_tusu("cal")  # önce sistem tuşu: en son çalan oturumu sürdürür
+        if sonuc.startswith("Erişilebilirlik"):
+            return sonuc
+        time.sleep(2)
+        if ses_caliyor():
+            return sonuc
+        # tuş bir şey başlatmadı (açık oturum yok): YouTube Music'i açıp son çalınanı başlatmayı dene
+        return _chrome_devam()
+    return _chrome_devam()
+
+
+def _chrome_devam():
     durum = ytm_js("1")
     if durum == "js_izni_yok":
         return "Chrome'da Görünüm > Geliştirici > Apple Events'ten JavaScript'e İzin Ver açılmalı"
