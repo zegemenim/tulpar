@@ -41,11 +41,11 @@ def vaka_sec():
 
 
 def yaz(istem):
-    c = llm.sor("hizli", taslak.TASLAK_SISTEM, istem, slot=2)
+    c = llm.sor("hizli", taslak.sistem(), istem, slot=2)
     try:
-        return " / ".join(m["metin"] for m in c["secenekler"][0]["mesajlar"])
+        return [" / ".join(m["metin"] for m in sc["mesajlar"]) for sc in c["secenekler"]]
     except Exception:  # noqa: BLE001
-        return "(boş: " + str(c)[:80] + ")"
+        return ["(boş: " + str(c)[:80] + ")"]
 
 
 def main():
@@ -63,11 +63,11 @@ def main():
         ek = ("\n\nBENZER GEÇMİŞ DURUMLAR (karşı taraf ne yazdı -> sahibi nasıl cevap verdi; SADECE ÜSLUBU (kelime seçimi, uzunluk, hitap) buradan öğren; KARAR sahibine aittir, bilmediğin kararlar için yine ayrı SEÇENEKLER hazırla):\n"
               + "\n".join(f"- \"{g[:150]}\" -> \"{c}\"" for g, c in cift)) if cift else ""
         ek += "\n" + benzer.uslup_ozeti(sid)
-        eski = "-" if SADECE_YENI else yaz(temel + son)
+        eski = ["-"] if SADECE_YENI else yaz(temel + son)
         yeni = yaz(temel + ek + son)
         gercek = a["metin"]
-        puan = lambda x: round(benzer._kosinus(benzer._ngram(x), benzer._ngram(gercek)), 3)  # noqa: E731
-        sonuclar.append({"gelen": [m["metin"] for m in gelen], "gercek": gercek, "eski": eski, "yeni": yeni,
+        puan = lambda x: round(max(benzer._kosinus(benzer._ngram(s), benzer._ngram(gercek)) for s in x), 3)  # noqa: E731  en iyi seçenek
+        sonuclar.append({"gelen": [m["metin"] for m in gelen], "gercek": gercek, "eski": eski, "yeni": yeni, "secenek_sayisi": len(yeni),
                          "benzer_eski": puan(eski), "benzer_yeni": puan(yeni), "bulunan_ornek": len(cift)})
         CIKTI.write_text(json.dumps(sonuclar, ensure_ascii=False, indent=1))
         print(len(sonuclar), "tamam", flush=True)

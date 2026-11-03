@@ -28,7 +28,7 @@ TASLAK_SISTEM = sahip.doldur(
     "İlk kez yazan kişide karşı tarafın hitabına uy; emin değilsen nötr ve kibar yaz.\n"
     "sahibinin kararını bilmediğin şeyleri (gelir mi, getirir mi, ne zaman müsait, yaptı mı) ASLA kendin seçme. "
     "Cevap sahibinin bir kararına bağlıysa, her olası karar için ayrı bir SEÇENEK hazırla (örn. 'Gelirim' / 'Gelemem'; "
-    "iki karar varsa birleşimleri: 'Gelirim, topum var' / 'Gelirim, topum yok' / 'Gelemem'). En fazla 4 seçenek. "
+    "iki karar varsa birleşimleri: 'Gelirim, topum var' / 'Gelirim, topum yok' / 'Gelemem'). §SECENEK§ "
     "Cevap sahibinin bildiği bir bilgiye bağlıysa (örn. 'bugün son tarihli ödev var mı?'), her olası cevap için seçenek yaz "
     "('Yok', 'Var: [hangisi]', 'Bilmiyorum'); etiket sahibine soruyu açıkça sorsun. "
     "Bir tarih/saat gibi seçeneklenemeyen bilgi gerekiyorsa [köşeli parantez] içinde boş bırak.\n"
@@ -39,6 +39,16 @@ TASLAK_SISTEM = sahip.doldur(
     'SADECE JSON: {"ozet": "gelenlerin tek cümle özeti", "secenekler": [{"etiket": "kısa karar adı", '
     '"mesajlar": [{"yanit_id": "...", "metin": "..."}]}]}  (karar gerekmiyorsa tek seçenek)'
 )
+
+
+def sistem():
+    """Taslak istemi; seçenek sayısı ayardan gelir."""
+    n = ayarlar.al("secenek_sayisi")
+    kural = (f"SEÇENEK SAYISI: yaklaşık {n} seçenek hazırla (en az {max(3, n // 2)}). İlk 4-5 seçenek en OLASI, sahibinin gerçekten yazacağı "
+             "cevaplar olsun (örnek mesajlara ve benzer geçmiş durumlara bakarak). Geri kalanı farklı YÖNLER olsun: kabul, ret, erteleme "
+             "('sonra bakarım'), karşı soru, bilgi isteme, şaka/samimi, çok kısa, biraz uzun, bilmediğim durum. Tekrar eden seçenek yazma. "
+             "Etiketler en fazla 3 kelime; her seçenek çoğunlukla TEK kısa mesaj.")
+    return TASLAK_SISTEM.replace("§SECENEK§", kural)
 
 
 def kart_getir(kuyruk, sohbet_id, ad, gecmis):
@@ -120,7 +130,7 @@ def hazirla(kuyruk, sohbet_id, sohbet_adi, gelenler, talimat=None):
                   "Tek seçenek yeter.")
     gecerli = {m["id"] for m in gecmis}
     for deneme in range(2):
-        cevap = kuyruk.ekle(Is("taslak", TASLAK_SISTEM, istem, aciklama=f"{sohbet_adi}: {len(gelenler)} mesaja cevap" + (" (sahibinin sözlü talimatı)" if talimat else ""))).bekle() or {}
+        cevap = kuyruk.ekle(Is("taslak", sistem(), istem, aciklama=f"{sohbet_adi}: {len(gelenler)} mesaja cevap" + (" (sahibinin sözlü talimatı)" if talimat else ""))).bekle() or {}
         secenekler = []
         for sec in cevap.get("secenekler") or []:
             if not isinstance(sec, dict):

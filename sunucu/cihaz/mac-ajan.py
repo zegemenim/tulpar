@@ -120,32 +120,33 @@ def ses_caliyor():
     return "playing audio" in cikti or "audio-out" in cikti
 
 
-def ytm_ac_ve_devam():
-    """'Devam / çal': zaten çalıyorsa dokunmaz (tuş durdururdu); değilse klavyedeki oynat tuşu gibi basar, 3 sn sonra hâlâ
-    çalmıyorsa YouTube Music'i Chrome'dan başlatır."""
-    if mod() == "sistem":
+def ses_bekle(sn=8):
+    """Çalan ses başlayana kadar en fazla `sn` saniye bekler (başka bir uygulamadaki medya geç başlayabilir)."""
+    for _ in range(int(sn * 2)):
         if ses_caliyor():
-            return "zaten çalıyor"
-        return _tus_sonra_chrome()
-    return _chrome_devam()
+            return True
+        time.sleep(0.5)
+    return False
 
 
-def _tus_sonra_chrome():
-    sonuc = medya_tusu("cal")
-    if sonuc.startswith("Erişilebilirlik"):
-        return sonuc
-    time.sleep(3)
-    return sonuc if ses_caliyor() else _chrome_devam()
+def ytm_ac_ve_devam():
+    """'Devam / çal' (sesli komut): zaten çalıyorsa dokunmaz; değilse klavyedeki oynat tuşu gibi basar (başka uygulamada
+    duraklatılmış medya varsa o devam eder); ses hâlâ başlamazsa YouTube Music'i Chrome'dan başlatır."""
+    if ses_caliyor():
+        return "zaten çalıyor"
+    return medya_oynat_durdur()
 
 
 def medya_oynat_durdur():
-    """Sistem modunda ⏯ düğmesi: klavyedeki oynat/durdur tuşuna basmak gibi. Başlatmayı hedefliyorsa ve bir şey çalmadıysa Chrome'a atar."""
+    """⏯ düğmesi (her modda): önce klavyedeki oynat/durdur tuşu. Çalan bir şey varsa durdurur. Çalmıyorsa tuş başka bir
+    uygulamadaki duraklatılmış medyayı başlatır; 8 sn içinde ses gelmezse son çalınan Chrome'dan başlatılır."""
     caliyordu = ses_caliyor()
     sonuc = medya_tusu("cal")
     if caliyordu or sonuc.startswith("Erişilebilirlik"):
         return sonuc  # çalan şey durduruldu
-    time.sleep(3)
-    return sonuc if ses_caliyor() else _chrome_devam()
+    if ses_bekle(8):
+        return sonuc + " (başka uygulamadaki medya devam etti)"
+    return _chrome_devam()
 
 
 def _klavye_devam():
@@ -219,9 +220,7 @@ def islem(ad, deger):
     elif ad == "medya_dur":
         return medya_tusu("cal")  # klavyedeki oynat/durdur tuşu: çalan oturumu durdurur
     elif ad == "medya_cal":  # birleşik oynat/duraklat düğmesi
-        if mod() == "sistem":
-            return medya_oynat_durdur()
-        return medya_tusu("cal") if ses_caliyor() else _chrome_devam()
+        return medya_oynat_durdur()
     elif ad == "medya_devam":
         return ytm_ac_ve_devam()
     elif ad == "medya_sonraki":
