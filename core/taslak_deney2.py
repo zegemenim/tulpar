@@ -77,8 +77,12 @@ def main():
     vakalar = d.vaka_sec_n(N)
     d.PROFIL_METNI = d.profil_hazirla({a["id"] for a, _, _ in vakalar})
     print("profil hazir,", len(vakalar), "vaka", flush=True)
-    sonuclar, bas = [], time.time()
-    for a, onceki, gelen in vakalar:
+    try:  # kesilen deney kaldığı yerden sürer
+        sonuclar = json.loads(CIKTI.read_text())
+    except (FileNotFoundError, ValueError):
+        sonuclar = []
+    bas = time.time()
+    for a, onceki, gelen in vakalar[len(sonuclar):]:
         if time.time() - bas > AZAMI_SN:
             print("sure doldu", flush=True)
             break
