@@ -125,7 +125,7 @@ def ytm_ac_ve_devam():
         sonuc = medya_tusu("cal")  # önce sistem tuşu: en son çalan oturumu sürdürür
         if sonuc.startswith("Erişilebilirlik"):
             return sonuc
-        time.sleep(2)
+        time.sleep(3)
         if ses_caliyor():
             return sonuc
         # tuş bir şey başlatmadı (açık oturum yok): YouTube Music'i açıp son çalınanı başlatmayı dene
