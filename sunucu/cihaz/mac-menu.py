@@ -8,7 +8,10 @@ import urllib.request
 import rumps
 
 K = pathlib.Path.home() / ".tulpar-ajan"
-HP = json.loads((K / "hp.json").read_text())
+try:
+    HP = json.loads((K / "hp.json").read_text())
+except FileNotFoundError:
+    HP = None  # HP bağlantısı yoksa yalnızca bu Mac'in kontrolleri çalışır
 AJAN_ANAHTAR = (K / "anahtar").read_text().strip()
 
 
@@ -46,6 +49,8 @@ class Menu(rumps.App):
 
     @rumps.timer(30)
     def yenile(self, _=None):
+        if HP is None:
+            return
         try:
             t = hp("/onaylar")
             g = hp("/gorevler")

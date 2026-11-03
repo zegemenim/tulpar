@@ -15,11 +15,10 @@ SAYI = re.compile(r"(?:yüzde\s*)?%?\s*(\d{1,3})")
 
 # (işlem, desen); sırası önemli: özel olan önce
 KURALLAR = [
-    ("medya_devam", re.compile(r"(?i)(müzi[ğg]i|muzigi|şarkıyı|sarkiyi|youtube music|yt music|yt musicten)?.*(en son çalın|kaldığı yerden|devam ettir|devam et)")),
+    ("medya_devam", re.compile(r"(?i)(en son çalın|kaldığı yerden|devam ettir|devam et|^(?:mac\w*\s+|telefon\w*\s+)?(?:bir\s+)?(müzi[ğg]i|muzigi|müzik|muzik|şarkıyı)\s*(çal|cal|aç|ac|başlat|baslat)$)")),
     ("medya_dur", re.compile(r"(?i)(müzi[ğg]i|muzigi|şarkıyı|sarkiyi|videoyu|medyayı)?\s*(durdur|duraklat|dur\b|sustur$)")),
     ("medya_sonraki", re.compile(r"(?i)(sonraki|sıradaki|siradaki|geç\b|atla)")),
     ("medya_onceki", re.compile(r"(?i)(önceki|onceki|geri al şarkı|bir önceki)")),
-    ("medya_cal", re.compile(r"(?i)(müzi[ğg]i|muzigi|şarkıyı|sarkiyi)\s*(aç|ac|çal|cal|başlat|baslat)")),
     ("sessiz", re.compile(r"(?i)(sesi|sesini)\s*(kapat|kıs sıfır|sessize al)|sessize al|sessiz(e)? (yap|al)|mute")),
     ("ses_ayar", re.compile(r"(?i)(sesi|sesini)\s*(%|yüzde)?\s*\d{1,3}\s*(yap|ayarla|getir|olsun)?")),
     ("parlaklik_ayar", re.compile(r"(?i)parlaklı[ğg]\w*\s*(%|yüzde)?\s*\d{1,3}\s*(yap|ayarla|getir|olsun)?")),
