@@ -37,7 +37,7 @@ Sahibinin istekleri ve kararları. Biten işler işaretlenir; yenileri eklendik�
 ## Ek istekler
 - Taslaklarda çıkartma: sık kullanılan / favori çıkartmalardan seçip gönderebilsin, taslakta görünsün
 - Tepki (emoji reaksiyon): önce hangi mesaja hangi tepki ve bağlamı anlatıp onay alsın
-- Ana ekranda Tulpar'ın cevabının altında hızlı cevap düğmeleri
+- [x] Ana ekranda Tulpar'ın cevabının altında hızlı cevap düğmeleri (Daha kısa söyle / Devam et / Bunu göreve ekle / Neden?) — APK 23
 - Sesli okuma sadece telefonun sesi açıkken
 - Uzak ekran (isteğe bağlı; terminal öncelikli)
 
@@ -63,8 +63,8 @@ Karar: "sesi aç", "müziği durdur" gibi basit komutlar Gemma'ya hiç gitmez. �
 - [x] Mac ajanı: `sunucu/cihaz/mac-ajan.py` + `kur-mac.sh` (port 8097, anahtarlı, sabit işlem listesi; YouTube Music'i Chrome'dan kontrol eder: "en son çalınanı devam ettir").
 - [x] Mac ajanı Mac'e kuruldu (LaunchAgent, 3 Kasım). Kalan izinler: Chrome'da Apple Events JavaScript izni; Erişilebilirlik izni; HP'de `veri/cihazlar.json` ve Mac'te `~/.tulpar-ajan/hp.json` (HP erişilince). Eski not: ( Chrome'da Apple Events JavaScript izni; Erişilebilirlik izni; rahatsız etme için "Tulpar Rahatsız Etme Aç/Kapat" Kısayolları).
 - [x] (APK 17) Telefon: uygulamada yerel modül (ses, parlaklık, rahatsız etme izni) — sunucudan gelen `cihaz` eylemini uygular.
-- [x] Pano eşitleme: HP `/pano` (bellekte, geçmişsiz, şifre gibi metinler atlanır) + Mac ajanı 2 sn'de bir eşitler; telefon tarafı APK ile.
-- [x] Mac menü çubuğu uygulaması `sunucu/cihaz/mac-menu.py` (rumps; taslak/görev listesi + ses/müzik/parlaklık/rahatsız etme). Kurulum için `pip install rumps` ve hp.json gerekir.
+- [x] Pano eşitleme: HP `/pano` (7 gün geçmiş, şifre gibi metinler atlanır) + Mac ajanı 2 sn'de bir eşitler; telefon: Mac→telefon uygulama kapalıyken de (komut servisi yazar), telefon→Mac uygulama açıkken (Android arka planda okutmaz) (APK 23).
+- [x] Mac menü çubuğu uygulaması `sunucu/cihaz/mac-menu.py` (rumps; pano geçmişi ve bildirim satırına tıklayınca Mac panosuna kopyalar; taslak/görev listesi + ses/müzik/parlaklık/rahatsız etme). Kurulum için `pip install rumps` ve hp.json gerekir.
 - [x] "X şarkısını çal" hızlı yolu (YT Music araması, kırılgan).
 - [x] (APK 17) Uygulamada "Cihazlar" sekmesi (aynı komutlar düğmelerle).
 - [ ] Diğer cihazlar; telefon izinleri (parlaklık, rahatsız etme) Cihazlar sekmesinden bir kez verilir (Windows/Linux ajanı, Home Assistant üzerinden Pi'deki akıllı cihazlar).

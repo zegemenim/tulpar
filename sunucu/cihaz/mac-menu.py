@@ -9,7 +9,7 @@ import threading
 
 import objc
 import rumps
-from AppKit import NSButton, NSMakeRect, NSTextField, NSView
+from AppKit import NSButton, NSMakeRect, NSPasteboard, NSPasteboardTypeString, NSTextField, NSView
 from Foundation import NSObject
 
 K = pathlib.Path.home() / ".tulpar-ajan"
@@ -46,6 +46,12 @@ def mac(islem, deger=None):
         return json.load(urllib.request.urlopen(r, timeout=25))["durum"]
     except Exception as e:  # noqa: BLE001
         return f"hata: {type(e).__name__}"
+
+
+def kopyala(metin):
+    pb = NSPasteboard.generalPasteboard()
+    pb.clearContents()
+    pb.setString_forType_(metin, NSPasteboardTypeString)
 
 
 class DugmeHedefi(NSObject):
@@ -130,14 +136,16 @@ class Menu(rumps.App):
         self._liste("Taslaklar", [f"{x.get('sohbet_adi')}: {str(x.get('ozet', ''))[:45]}" for x in t])
         self._liste("Görevler", [str(x.get("metin"))[:50] for x in g])
         self._liste("WhatsApp özeti", [("⚠ " if x["cevap_gerekli"] else "") + f"{x['ad']}: {x['ozet']}"[:70] for x in oz.get("sohbetler", [])])
-        self._liste("Telefon bildirimleri", [f"{x['baslik'] or x['paket'].split('.')[-1]}: {x['metin']}".replace("\n", " ")[:70] for x in bi])
-        self._liste("Pano geçmişi", [str(x["metin"]).replace("\n", " ")[:50] for x in p], lambda ad, tam=p: None)
+        self._liste("Telefon bildirimleri", [f"{x['baslik'] or x['paket'].split('.')[-1]}: {x['metin']}".replace("\n", " ")[:70] for x in bi], [f"{x['baslik']}\n{x['metin']}".strip() for x in bi])
+        self._liste("Pano geçmişi", [str(x["metin"]).replace("\n", " ")[:50] for x in p], [str(x["metin"]) for x in p])
 
-    def _liste(self, ad, satirlar, _=None):
+    def _liste(self, ad, satirlar, kopyalanacak=None):
+        """kopyalanacak verilirse satıra tıklayınca o metin Mac panosuna alınır."""
         alt = self.menu[ad]
         alt.clear()
-        for s in satirlar[:12] or ["(boş)"]:
-            alt.add(rumps.MenuItem(s))
+        for i, s in enumerate(satirlar[:12] or ["(boş)"]):
+            tam = kopyalanacak[i] if kopyalanacak and satirlar else None
+            alt.add(rumps.MenuItem(s, callback=(lambda _, t=tam: kopyala(t)) if tam else None))
 
 
 Menu().run()

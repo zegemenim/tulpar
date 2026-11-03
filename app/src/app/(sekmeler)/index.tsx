@@ -13,6 +13,8 @@ import { durumYazisi, Konusma, useSesliAsistan } from '../../lib/ses';
 import { useRenk } from '../../lib/tema';
 
 
+const HIZLI_CEVAPLAR = ['Daha kısa söyle', 'Devam et', 'Bunu göreve ekle', 'Neden?'];  // Tulpar'ın cevabının altında tek dokunuşla sorulur
+
 export default function AnaEkran() {
   const r = useRenk();
   const [ana, setAna] = useState<Ana | null>(null);
@@ -127,6 +129,16 @@ export default function AnaEkran() {
           </View>
         ))}
 
+        {konusma.at(-1)?.kim === 'tulpar' && konusma.at(-1)?.metin && asistan.durum === 'bos' && (
+          <View style={s.hizli}>
+            {HIZLI_CEVAPLAR.map((h) => (
+              <Pressable key={h} onPress={() => asistan.sor(h, false)} style={[s.kucukDugme, { borderColor: r.cizgi, backgroundColor: r.kart }]}>
+                <Text style={{ color: r.ana, fontSize: 13 }}>{h}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+
         {ana && ana.onemli.length > 0 && <Text style={[s.bolum, { color: r.soluk }]}>SON 24 SAATTE ÖNEMLİ</Text>}
         {ana?.onemli.slice(0, 10).map((m) => (
           <Pressable key={m.id} onPress={() => router.push({ pathname: '/sohbet/[id]', params: { id: m.sohbet_id, ad: m.sohbet_adi } })}
@@ -165,6 +177,7 @@ const s = StyleSheet.create({
   onemli: { borderWidth: 1, borderRadius: 12, padding: 10, marginBottom: 6, gap: 2 },
   sohbetSatir: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14, marginBottom: 6 },
   kucukDugme: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 },
+  hizli: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 6 },
   alt: { padding: 12, borderTopWidth: 1 },
   girdiSatir: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   girdi: { flex: 1, borderWidth: 1, borderRadius: 22, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15 },

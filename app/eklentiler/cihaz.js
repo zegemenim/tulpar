@@ -9,9 +9,13 @@ const KOTLIN = (p) => `package ${p}
 
 import android.app.NotificationManager
 import android.app.SearchManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
@@ -24,6 +28,7 @@ import java.net.URL
 
 object CihazKomutu {
   @Volatile private var calisiyor = false
+  private var panoZaman = -1.0  // son görülen HP panosunun zamanı; ilk yoklamada sadece kaydedilir (eski pano telefona basılmasın)
 
   fun baslat(ctx: Context) {
     if (calisiyor) return
@@ -49,8 +54,28 @@ object CihazKomutu {
         if (b.responseCode != 200) continue
         val liste = JSONArray(b.inputStream.bufferedReader().use { it.readText() })
         for (k in 0 until liste.length()) uygula(ctx, liste.getJSONObject(k))
+        try { panoyuEsitle(ctx, adresler.getString(i).trimEnd('/'), j.getString("anahtar")) } catch (e: Exception) { Log.w("Tulpar", "pano: " + e.message) }
         return
       } catch (e: Exception) { continue }
+    }
+  }
+
+  // Mac/diğer cihazdan kopyalanan metin, uygulama kapalıyken de telefon panosuna yazılır (Android arka planda yazmaya izin verir,
+  // okumaya vermez: telefondan HP'ye yönde uygulama açık olmalı).
+  private fun panoyuEsitle(ctx: Context, adres: String, anahtar: String) {
+    val b = URL(adres + "/pano").openConnection() as HttpURLConnection
+    b.connectTimeout = 3000; b.readTimeout = 4000
+    b.setRequestProperty("x-tulpar-anahtar", anahtar)
+    if (b.responseCode != 200) return
+    val p = JSONObject(b.inputStream.bufferedReader().use { it.readText() })
+    val zaman = p.optDouble("zaman", 0.0)
+    val ilk = panoZaman < 0
+    if (zaman <= panoZaman) return
+    panoZaman = zaman
+    val metin = p.optString("metin", "")
+    if (ilk || metin.isEmpty() || p.optString("kaynak", "").startsWith("telefon")) return
+    Handler(Looper.getMainLooper()).post {
+      (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Tulpar pano", metin))
     }
   }
 
