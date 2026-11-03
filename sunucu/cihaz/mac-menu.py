@@ -5,7 +5,12 @@ import json
 import pathlib
 import urllib.request
 
+import threading
+
+import objc
 import rumps
+from AppKit import NSButton, NSMakeRect, NSTextField, NSView
+from Foundation import NSObject
 
 K = pathlib.Path.home() / ".tulpar-ajan"
 try:
@@ -43,24 +48,57 @@ def mac(islem, deger=None):
         return f"hata: {type(e).__name__}"
 
 
+class DugmeHedefi(NSObject):
+    """Menü içindeki özel görünüm düğmeleri: basınca menü KAPANMAZ, art arda basılabilir."""
+    def init(self):
+        self = objc.super(DugmeHedefi, self).init()
+        self.islemler = []
+        return self
+
+    def tikla_(self, gonderen):
+        islem = self.islemler[gonderen.tag()]
+        threading.Thread(target=mac, args=(islem,), daemon=True).start()
+
+
+HEDEFLER_REF = []  # nesneler bellekten silinmesin
+
+
+def dugme_satiri(baslik, dugmeler):
+    """dugmeler: [(yazı, işlem)]; menüde açık kalan tek satır."""
+    hedef = DugmeHedefi.alloc().init()
+    hedef.islemler = [i for _, i in dugmeler]
+    gorunum = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 270, 30))
+    etiket = NSTextField.labelWithString_(baslik)
+    etiket.setFrame_(NSMakeRect(14, 5, 90, 20))
+    gorunum.addSubview_(etiket)
+    x = 100
+    for sira, (yazi, _) in enumerate(dugmeler):
+        d = NSButton.buttonWithTitle_target_action_(yazi, hedef, "tikla:")
+        d.setTag_(sira)
+        d.setFrame_(NSMakeRect(x, 2, 50, 26))
+        gorunum.addSubview_(d)
+        x += 54
+    HEDEFLER_REF.append(hedef)
+    oge = rumps.MenuItem(baslik)
+    oge._menuitem.setView_(gorunum)
+    return oge
+
+
 class Menu(rumps.App):
     def __init__(self):
         super().__init__("T", quit_button="Çık")
         self.hedef_menu = rumps.MenuItem("Hedef cihaz: mac")
         self.hedef_menu.add(rumps.MenuItem("mac", callback=self.sec))
         self.menu = [
-            "Taslaklar", "Görevler", "Pano geçmişi", None, self.hedef_menu,
-            ("Ses", [rumps.MenuItem("Aç", callback=lambda _: mac("ses_ac")), rumps.MenuItem("Kıs", callback=lambda _: mac("ses_kis")),
-                     rumps.MenuItem("Sessiz", callback=lambda _: mac("sessiz"))]),
+            "Taslaklar", "Görevler", "Pano geçmişi", None,
+            dugme_satiri("Ses", [("−", "ses_kis"), ("+", "ses_ac"), ("🔇", "sessiz")]),
+            dugme_satiri("Parlaklık", [("−", "parlaklik_kis"), ("+", "parlaklik_ac")]),
+            dugme_satiri("Müzik", [("⏮", "medya_onceki"), ("⏯", "medya_cal"), ("⏭", "medya_sonraki")]),
+            None, self.hedef_menu,
             ("Müzik kaynağı", [rumps.MenuItem("Sistem (en son çalan)", callback=lambda _: mac("muzik_sistem")),
                                rumps.MenuItem("Google Chrome", callback=lambda _: mac("muzik_chrome"))]),
-            ("Müzik", [rumps.MenuItem("Duraklat / Oynat", callback=lambda _: mac("medya_cal")),
-                       rumps.MenuItem("Sonraki", callback=lambda _: mac("medya_sonraki")),
-                       rumps.MenuItem("Önceki", callback=lambda _: mac("medya_onceki"))]),
-            ("Ekran", [rumps.MenuItem("Parlaklık +", callback=lambda _: mac("parlaklik_ac")),
-                       rumps.MenuItem("Parlaklık -", callback=lambda _: mac("parlaklik_kis")),
-                       rumps.MenuItem("Rahatsız etme aç", callback=lambda _: mac("rahatsiz_etme_ac")),
-                       rumps.MenuItem("Rahatsız etme kapat", callback=lambda _: mac("rahatsiz_etme_kapat"))]),
+            ("Rahatsız etme", [rumps.MenuItem("Aç", callback=lambda _: mac("rahatsiz_etme_ac")),
+                               rumps.MenuItem("Kapat", callback=lambda _: mac("rahatsiz_etme_kapat"))]),
             None,
         ]
 
