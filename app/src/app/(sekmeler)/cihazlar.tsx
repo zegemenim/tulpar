@@ -9,6 +9,7 @@ import { useRenk } from '../../lib/tema';
 
 const KOMUTLAR: { baslik: string; islemler: [string, string][] }[] = [
   { baslik: 'Ses', islemler: [['Aç', 'ses_ac'], ['Kıs', 'ses_kis'], ['Sessiz', 'sessiz']] },
+  { baslik: 'Müzik kaynağı (Mac)', islemler: [['Sistem (en son çalan)', 'muzik_sistem'], ['Google Chrome', 'muzik_chrome']] },
   { baslik: 'Müzik', islemler: [['Devam / Oynat', 'medya_devam'], ['Duraklat', 'medya_dur'], ['Sonraki', 'medya_sonraki'], ['Önceki', 'medya_onceki']] },
   { baslik: 'Ekran', islemler: [['Parlaklık +', 'parlaklik_ac'], ['Parlaklık -', 'parlaklik_kis'], ['Rahatsız etme aç', 'rahatsiz_etme_ac'], ['Rahatsız etme kapat', 'rahatsiz_etme_kapat']] },
 ];

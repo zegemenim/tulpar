@@ -52,6 +52,8 @@ class Menu(rumps.App):
             "Taslaklar", "Görevler", "Pano geçmişi", None, self.hedef_menu,
             ("Ses", [rumps.MenuItem("Aç", callback=lambda _: mac("ses_ac")), rumps.MenuItem("Kıs", callback=lambda _: mac("ses_kis")),
                      rumps.MenuItem("Sessiz", callback=lambda _: mac("sessiz"))]),
+            ("Müzik kaynağı", [rumps.MenuItem("Sistem (en son çalan)", callback=lambda _: mac("muzik_sistem")),
+                               rumps.MenuItem("Google Chrome", callback=lambda _: mac("muzik_chrome"))]),
             ("Müzik", [rumps.MenuItem("Duraklat / Oynat", callback=lambda _: mac("medya_cal")),
                        rumps.MenuItem("Sonraki", callback=lambda _: mac("medya_sonraki")),
                        rumps.MenuItem("Önceki", callback=lambda _: mac("medya_onceki"))]),

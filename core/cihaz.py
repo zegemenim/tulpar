@@ -30,7 +30,7 @@ KURALLAR = [
     ("rahatsiz_etme_kapat", re.compile(r"(?i)rahatsız etme(yi)?\s*(kapat|bitir|iptal)")),
 ]
 SARKI = re.compile(r"(?i)^(.{3,60}?)\s+(?:çal|cal|oynat)$")
-ETIKET = {"sarki_cal": "şarkı aranıp çalınıyor", "medya_devam": "müzik devam ediyor", "medya_dur": "duraklatıldı", "medya_sonraki": "sonraki parça", "medya_onceki": "önceki parça",
+ETIKET = {"sarki_cal": "şarkı aranıp çalınıyor", "muzik_chrome": "müzik kaynağı Chrome", "muzik_sistem": "müzik kaynağı sistem", "medya_devam": "müzik devam ediyor", "medya_dur": "duraklatıldı", "medya_sonraki": "sonraki parça", "medya_onceki": "önceki parça",
           "medya_cal": "müzik başlatıldı", "sessiz": "ses kapatıldı", "ses_ayar": "ses ayarlandı", "parlaklik_ayar": "parlaklık ayarlandı", "ses_ac": "ses açıldı", "ses_kis": "ses kısıldı",
           "parlaklik_ac": "parlaklık artırıldı", "parlaklik_kis": "parlaklık azaltıldı",
           "rahatsiz_etme_ac": "rahatsız etme açıldı", "rahatsiz_etme_kapat": "rahatsız etme kapatıldı"}

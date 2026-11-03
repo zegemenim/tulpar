@@ -13,6 +13,17 @@ ANAHTAR = (pathlib.Path.home() / ".tulpar-ajan/anahtar").read_text().strip()
 YTM = "music.youtube.com"
 
 
+MOD_DOSYA = pathlib.Path.home() / ".tulpar-ajan/muzik"
+
+
+def mod():
+    """Müzik kaynağı: 'sistem' (varsayılan; sistem medya tuşları, en son çalan ne ise) ya da 'chrome' (Chrome'da YouTube Music)."""
+    try:
+        return "chrome" if MOD_DOSYA.read_text().strip() == "chrome" else "sistem"
+    except FileNotFoundError:
+        return "sistem"
+
+
 def chrome_acik():  # kapalı uygulamaya "tell" göndermek onu açar; önce çalışıyor mu bak
     return subprocess.run(["pgrep", "-x", "Google Chrome"], capture_output=True).returncode == 0
 
@@ -79,23 +90,19 @@ def zen_acik():
 
 
 def medya(js, tus):
-    # Zen (Firefox tabanlı) betikle kontrol edilemez: Chrome'da YouTube Music yoksa ve Zen açıksa sistem medya tuşu kullanılır
-    if not ytm_sekmesi_var() and zen_acik():
-        return medya_tusu(tus)
+    if mod() == "sistem":
+        return medya_tusu(tus)  # en son çalan ne ise onu yönetir
     sonuc = ytm_js(js)
     if sonuc == "js_izni_yok":
-        if ytm_sekmesi_var():
-            return medya_tusu(tus)
-        return "YouTube Music açık değil"
+        return "Chrome'da Görünüm > Geliştirici > Apple Events'ten JavaScript'e İzin Ver açılmalı"
     if sonuc == "yok":
-        return "YouTube Music açık değil"
+        return "Chrome'da YouTube Music açık değil"
     return sonuc or "tamam"
 
 
 def ytm_ac_ve_devam():
-    if not ytm_sekmesi_var() and zen_acik():
-        subprocess.run(["open", "-a", "Zen", "https://" + YTM], capture_output=True)
-        return "Zen'de YouTube Music açıldı; ilk seferde oynat düğmesine bir kez bas (sonra tuş komutları çalışır)"
+    if mod() == "sistem":
+        return medya_tusu("cal")  # en son çalınanı başlatır/sürdürür
     durum = ytm_js("1")
     if durum == "js_izni_yok":
         return "Chrome'da Görünüm > Geliştirici > Apple Events'ten JavaScript'e İzin Ver açılmalı"
@@ -126,6 +133,9 @@ def islem(ad, deger):
         osa("set volume with output muted")
     elif ad in ("medya_dur", "medya_cal"):
         return medya("document.querySelector('#play-pause-button').click()", "cal")
+    elif ad in ("muzik_chrome", "muzik_sistem"):
+        MOD_DOSYA.write_text(ad.split("_")[1])
+        return "müzik kaynağı: " + ad.split("_")[1]
     elif ad == "sarki_cal":
         return ytm_sarki_cal(deger)
     elif ad == "medya_devam":
@@ -165,6 +175,8 @@ class Is(BaseHTTPRequestHandler):
 
 def ytm_sarki_cal(ad):
     """YouTube Music'te arar ve ilk şarkıyı çalar (sayfa yapısına bağlı, kırılabilir)."""
+    if mod() == "sistem":
+        return "Sistem modunda şarkı adıyla arama yapılamaz; müzik kaynağını Chrome yap"
     ad = "".join(c for c in str(ad) if c.isalnum() or c in " -'").strip()[:80]
     if not ad:
         return "şarkı adı boş"
