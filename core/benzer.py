@@ -41,17 +41,19 @@ def ciftler():
             gelen = gelen[-2:] + [s["metin"]]
         elif gelen and len(s["metin"]) < 300:
             g = " ".join(gelen)
-            sonuc.append((g, s["metin"], s["sohbet_id"], _ngram(g)))
+            sonuc.append((g, s["metin"], s["sohbet_id"], _ngram(g), s["zaman"]))
             gelen = []
     _onbellek.update(zaman=time.time(), ciftler=sonuc)
     return sonuc
 
 
-def benzer_cevaplar(sohbet_id, gelen_metinler, n=8):
+def benzer_cevaplar(sohbet_id, gelen_metinler, n=8, once=None):
     """Gelen mesaja en benzer geçmiş çiftler; aynı kişiyle olanlara öncelik verilir."""
     sorgu = _ngram(" ".join(gelen_metinler))
     puanli = []
-    for g, c, sid, ng in ciftler():
+    for g, c, sid, ng, z in ciftler():
+        if once is not None and z >= once:  # ölçümde gelecekten bilgi sızmasın
+            continue
         p = _kosinus(sorgu, ng)
         if p > 0.25:
             puanli.append((p + (0.15 if sid == sohbet_id else 0.0), g, c))

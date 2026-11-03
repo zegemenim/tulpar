@@ -1,9 +1,27 @@
 #!/bin/sh
 # Wi-Fi bekçisi (HP, Realtek RTL8822CE): modeme 3 kez art arda ulaşılamazsa kartı baştan başlatır.
 # Neden: bu kart "failed to send h2c command" ile kilitlenip modemi göremez hale geliyor; modül yeniden yüklemek yetmiyor,
-# PCI aygıtını kaldırıp yeniden taramak yazılımı sıfırlıyor. Ağ yolu telefon/USB ya da ethernet ise dokunmaz.
+# PCI aygıtını kaldırıp yeniden taramak yazılımı sıfırlıyor. USB Wi-Fi adaptörü (ana bağlantı, metrik 100) da aynı şekilde
+# denetlenir: modeme ulaşamazsa kapatıp açılır; o sırada trafik kendiliğinden dahili karta (metrik 600) ya da telefona geçer.
 KART=0000:03:00.0
 SAYAC=/run/tulpar-wifi-bekci
+# ---- USB Wi-Fi adaptörü (ASUS USB-N10, ana bağlantı) ----
+USB=$(ls /sys/class/net | grep '^wlx' | head -1)
+if [ -n "$USB" ]; then
+  UGW=$(ip route show dev "$USB" 2>/dev/null | awk '/default/ {print $3; exit}')
+  [ -z "$UGW" ] && UGW=192.168.1.1
+  if ping -c 1 -W 3 -I "$USB" "$UGW" >/dev/null 2>&1; then
+    echo 0 > "$SAYAC-usb"
+  else
+    U=$(( $(cat "$SAYAC-usb" 2>/dev/null || echo 0) + 1 )); echo "$U" > "$SAYAC-usb"
+    if [ "$U" -ge 2 ]; then
+      echo 0 > "$SAYAC-usb"
+      logger -t tulpar-wifi "USB adaptor modeme ulasamiyor, kapatilip aciliyor"
+      ip link set "$USB" down; sleep 3; ip link set "$USB" up; networkctl reconfigure "$USB" 2>/dev/null
+    fi
+  fi
+fi
+
 GW=$(ip route show dev wlo1 2>/dev/null | awk '/default/ {print $3; exit}')
 [ -z "$GW" ] && GW=192.168.1.1
 if ping -c 1 -W 3 -I wlo1 "$GW" >/dev/null 2>&1; then
