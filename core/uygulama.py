@@ -14,6 +14,7 @@ import ayarlar
 import db
 import llm
 import sahip
+import cihaz
 import ses
 import taslak
 import tarayici
@@ -62,7 +63,7 @@ def _takvim_guncelle(m, kim, ozet, veri):
               '"tarih": "...", "saat": "..."} döndür (bilinmeyen alanı eski karttan al). Farklı bir etkinlikse {"ayni": null} döndür.')
     icerik = f"Kartlar:\n{liste}\n\nYeni mesaj ({kim}): {m['metin'][:300]}\nÇıkan özet: {ozet} | {json.dumps(veri, ensure_ascii=False)}"
     try:
-        k = _baglam["kuyruk"].ekle(Is("komut", sistem, icerik)).bekle(180) or {}
+        k = _baglam["kuyruk"].ekle(Is("komut", sistem, icerik, aciklama=f"Takvim tekrar kontrolü: {kim}")).bekle(180) or {}
         i = k.get("ayni")
         if not isinstance(i, int) or not 0 <= i < len(bekleyen):
             return False
@@ -262,7 +263,7 @@ def _durum_ozeti():
 
 # Bu kelimeler geçiyorsa bir iş isteniyor olabilir; geçmiyorsa sohbet sayılır ve araç kararı atlanır (hız için)
 ISTEK_IPUCU = re.compile(r"(?i)\b(ekle|kaydet|hatırlat|hatirlat|takvim|randevu|alarm|kur|aç|ac|kapat|başlat|durdur|araştır|arastir|"
-                         r"bul|ara\b|özetle|ozetle|yaz|gönder|gonder|taslak|söyle|soyle|cevap|mesaj|kod|site|proje|düzelt|duzelt|ekran|görev|gorev)")
+                         r"bul|ara\b|özetle|ozetle|yaz|gönder|gonder|taslak|söyle|soyle|kod|site|proje|düzelt|duzelt|ekran|görev|gorev)")
 
 
 # Araç kararına eklenen kurallar: eksik bilgiyi sor, eklemeden önce özetleyip onay al (çok adımlı konuşma)
@@ -279,7 +280,7 @@ ADIM_KURALI = (
 def _arastir(soru, sid):
     """Araştırmayı arka planda yapar; sonucu sohbete Tulpar mesajı olarak yazar (bildirim /bildirimler'den gider)."""
     def model_sor(sistem, icerik):
-        return _baglam["kuyruk"].ekle(Is("komut", sistem, icerik, json_cevap=False)).bekle(900)  # sahibi istedi: acil
+        return _baglam["kuyruk"].ekle(Is("komut", sistem, icerik, json_cevap=False, aciklama=f"Araştırma özeti: {soru[:60]}")).bekle(900)  # sahibi istedi: acil
     try:
         sayfalar = tarayici.ara(soru)
         metin = tarayici.ozetle(soru, sayfalar, model_sor) if sayfalar else ""
@@ -324,7 +325,7 @@ def _taslak_yaz(kisi, talimat):
     sistem = ('Sahibi bir kişiye mesaj yazdırmak istiyor. Sohbet adı rehberdeki ad olmayabilir (kişinin WhatsApp adı farklı olabilir). '
               'Sahibinin sözündeki ipuçlarından (kişinin adı, o kişinin yazdığı mesajların içeriği, özel mi grup mu) hangi sohbetin kastedildiğini seç. '
               'SADECE JSON: {"secim": sohbet_numarası, "emin": true|false}. Hiçbiri uymuyorsa {"secim": null}. Özel sohbeti, sahibi grup demedikçe tercih et.')
-    k = _baglam["kuyruk"].ekle(Is("komut", sistem, f"Kişi: {kisi}\nSahibinin sözü: {talimat}\n\nSohbetler:\n{liste}")).bekle(180) or {}
+    k = _baglam["kuyruk"].ekle(Is("komut", sistem, f"Kişi: {kisi}\nSahibinin sözü: {talimat}\n\nSohbetler:\n{liste}", aciklama=f"Taslak için sohbet seçimi: {kisi}")).bekle(180) or {}
     i = k.get("secim")
     if not isinstance(i, int) or not 0 <= i < len(adaylar):
         return {"hata": f"'{kisi}' hangi sohbet anlaşılamadı; sohbetin adını söyler misin?"}
@@ -377,7 +378,7 @@ def _arac_uygula(metin, dogrudan=False, gecmis=None, sid=None):
     if dogrudan:
         karar = llm.sor("hizli", istem, metin, gecmis=gecmis, slot=2)
     else:
-        karar = k.ekle(Is("komut", istem, metin)).bekle(180)
+        karar = k.ekle(Is("komut", istem, metin, aciklama=f"Hangi araç gerekli: {metin[:60]}")).bekle(180)
     karar = karar or {}
     arac, p = karar.get("arac", "yok"), karar.get("parametreler") or {}
     eylem, ek = None, ""
@@ -427,9 +428,12 @@ def konus(govde: dict = Body(...)):
     metin = (govde.get("metin") or "").strip()
     if not metin:
         raise HTTPException(400, "metin boş")
+    hizli = cihaz.uygula(metin)  # basit cihaz komutu: model hiç çalışmaz
+    if hizli:
+        return {"cevap": hizli[0], "eylem": hizli[1], "arac": "cihaz"}
     arac, eylem, sistem = _arac_uygula(metin)
     sabit = eylem.pop("sabit", None) if eylem else None
-    cevap = sabit or _baglam["kuyruk"].ekle(Is("komut", sistem, metin, json_cevap=False)).bekle(180) or "Şu an cevap veremedim."
+    cevap = sabit or _baglam["kuyruk"].ekle(Is("komut", sistem, metin, json_cevap=False, aciklama=f"Sohbet cevabı: {metin[:60]}")).bekle(180) or "Şu an cevap veremedim."
     log(f"konusma: {metin[:50]} -> {arac}")
     return {"cevap": cevap.strip(), "eylem": eylem, "arac": arac}
 
@@ -503,6 +507,16 @@ def konus_akis(govde: dict = Body(...)):
     def uret():
         yield json.dumps({"tur": "basladi", "sohbet_id": sid}) + "\n"
         cevap, arac, eylem = [], "yok", None
+        hizli = None if devam else cihaz.uygula(metin)
+        if hizli:  # basit cihaz komutu (ses, parlaklık, müzik...): model çalışmadan anında yapılır
+            tum = hizli[0]
+            yield json.dumps({"tur": "eylem", "eylem": hizli[1], "arac": "cihaz"}, ensure_ascii=False) + "\n"
+            yield json.dumps({"tur": "parca", "metin": tum}, ensure_ascii=False) + "\n"
+            db.yaz("INSERT INTO asistan_mesaj (sohbet_id, rol, metin, eylem, zaman) VALUES (?,?,?,?,?)", sid, "tulpar", tum,
+                   json.dumps(hizli[1]) if hizli[1] else None, time.time())
+            db.yaz("UPDATE asistan_sohbet SET guncel=? WHERE id=?", time.time(), sid)
+            yield json.dumps({"tur": "son", "soru": False}) + "\n"
+            return
         with _baglam["kuyruk"].canli():
             if devam or ISTEK_IPUCU.search(metin):  # bir iş isteniyor veya süren iş: önce araç kararı
                 arac, eylem, sistem = _arac_uygula(metin, dogrudan=True, gecmis=gecmis[-8:], sid=sid)

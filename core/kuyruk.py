@@ -49,6 +49,9 @@ _sira = itertools.count()
 YUVA = {"eleme": 0, "taslak": 1, "komut": 2}
 
 
+TUR_AD = {"eleme": "Mesaj değerlendirme", "taslak": "Cevap taslağı", "komut": "Konuşma/komut", "ozet": "Özet/hafıza"}
+
+
 @dataclass(order=True)
 class Is:
     sira_anahtari: tuple = field(init=False, repr=False)
@@ -58,6 +61,7 @@ class Is:
     oncelik: str = field(default="", compare=False)
     dusunme: str = field(default=None, compare=False)
     json_cevap: bool = field(default=True, compare=False)
+    aciklama: str = field(default="", compare=False)  # günlükte görünen insan okunur açıklama (kim/ne)
     sonuc: object = field(default=None, compare=False)
     hata: str = field(default=None, compare=False)
     kesilme: int = field(default=0, compare=False)
@@ -92,7 +96,8 @@ class Kuyruk:
                 self.acil_sayisi += 1
                 self.acil_var.set()
         (self.hizli if is_.model == "hizli" else self.buyuk).put(is_)
-        log(f"is eklendi: {is_.tur} ({is_.oncelik}) -> {is_.model}")
+        bekleyen = (self.hizli if is_.model == "hizli" else self.buyuk).qsize()
+        log(f"SIRAYA ALINDI | {TUR_AD.get(is_.tur, is_.tur)} | {is_.aciklama or '-'} | öncelik: {is_.oncelik}, önünde bekleyen: {max(bekleyen - 1, 0)}")
         return is_
 
     def _acil_bitti(self):
@@ -105,7 +110,7 @@ class Kuyruk:
         t0 = time.time()
         is_.sonuc = llm.sor(is_.model, is_.sistem, is_.kullanici, is_.json_cevap, is_.dusunme, durdur,
                                 slot=YUVA.get(is_.tur))
-        log(f"is bitti: {is_.tur} {is_.model} ({time.time() - t0:.0f} sn)")
+        log(f"MODEL BİTİRDİ ({time.time() - t0:.0f} sn) | {TUR_AD.get(is_.tur, is_.tur)} | {is_.aciklama or '-'}")
 
     def canli(self):
         """Sahibiyle anlık sesli/yazılı konuşma sürerken arka plan işleri yeni iş almaz (işlemci ona kalsın)."""

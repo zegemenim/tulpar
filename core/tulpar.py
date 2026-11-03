@@ -102,7 +102,7 @@ def grup_ele(sohbet_id):
         with _kilit:
             _sohbet[sohbet_id]["eleme"] -= 1
     if len(mesajlar) > 1:
-        log(f"toplu degerlendiriliyor: {temsilci.get('sohbet_adi', '?')[:30]} ({len(mesajlar)} mesaj, tek is)")
+        log(f"TOPLU DEĞERLENDİRME | {temsilci.get('sohbet_adi', '?')[:40]} | {len(mesajlar)} mesaj tek işte birleştirildi")
     ele(temsilci, toplu=mesajlar)
 
 
@@ -150,11 +150,12 @@ def ele(m, toplu=None):
         degerlendir = f"Değerlendirilecek mesaj: {m['metin']}"
     istem = (f"Kaynak: {kaynak}\n" + (f"Önceki mesajlar (sadece bağlam, değerlendirme):\n{baglam}\n" if baglam else "")
              + degerlendir)
-    is_ = kuyruk.ekle(Is("eleme", sistem, istem))
+    onizleme = " | ".join(f"{x.get('gonderen_adi') or '?'}: {x['metin'][:50]}" for x in (toplu or [m])[:3])
+    is_ = kuyruk.ekle(Is("eleme", sistem, istem, aciklama=f"{kaynak[:45]} → {onizleme[:140]}"))
     is_.bekle()
     if is_.hata or not isinstance(is_.sonuc, dict) or "onem" not in is_.sonuc:
         # model ulaşılamadı veya bozuk cevap: karar kaydetme, mesaj yeniden denenmek üzere elenmemiş kalır
-        log(f"eleme ertelendi ({is_.hata or 'gecersiz cevap'}): {kaynak[:40]}")
+        log(f"DEĞERLENDİRME ERTELENDİ | {kaynak[:40]} | sebep: {is_.hata or 'model geçersiz cevap verdi'}; 2 dk sonra yeniden denenecek")
         with _kilit:
             _sohbet[m["sohbet_id"]]["eleme"] -= 1
         if not m.get("_deneme"):  # bir kez 2 dk sonra tekrar dene; olmazsa servis açılışında yeniden alınır
@@ -170,10 +171,11 @@ def ele(m, toplu=None):
         uygulama.elemeden_onay(m, sonuc)
     except Exception as e:
         log(f"HATA onay karti: {e}")
-    log(f"eleme: {kaynak[:40]} -> onem={sonuc.get('onem')} aksiyon={sonuc.get('aksiyon')}"
-        + (f" UYARI: {', '.join(sonuc['guvenlik'])}" if sonuc.get("guvenlik") else ""))
+    log(f"SONUÇ | {kaynak[:45]} | önem: {sonuc.get('onem')}, aksiyon: {sonuc.get('aksiyon')}, ihtimal: {sonuc.get('cevap_ihtimali', '-')}"
+        + (f" | ÖZET: {sonuc['ozet'][:90]}" if sonuc.get("ozet") else "")
+        + (f" | UYARI: {', '.join(sonuc['guvenlik'])}" if sonuc.get("guvenlik") else ""))
     if sonuc.get("onem") == "yuksek":
-        log(f"BILDIRIM: {kaynak[:40]}: {sonuc.get('ozet') or m['metin'][:80]}")
+        log(f"BİLDİRİM GİTTİ | {kaynak[:45]} | {sonuc.get('ozet') or m['metin'][:80]}")
     istiyor = sonuc.get("aksiyon") == "cevap_taslagi" or (
         sonuc.get("tur") == "soru" and not m.get("grup") and sonuc.get("aksiyon") != "yok")
     # cevap seviyesi: modelin "sahibi normalde cevaplar mı" puanı (0-10) eşiğe göre; sahibe doğrudan yazılanlar her seviyede geçer
@@ -186,7 +188,7 @@ def ele(m, toplu=None):
         # ÖNEMLİ grupta doğrudan sahibe yazılan: haber ver ve "taslak hazırlayayım mı?" diye sor
         sonuc["onem"] = "yuksek"
         db.eleme_kaydet(m["id"], sonuc)
-        log(f"BILDIRIM: {kaynak[:40]}: sana yazildi: {m['metin'][:80]}")
+        log(f"BİLDİRİM GİTTİ | {kaynak[:45]} | doğrudan sana yazıldı: {m['metin'][:80]}")
         uygulama.onay_ekle("taslak_teklif", f"{m.get('gonderen_adi') or '?'} sana yazdı ({m.get('sohbet_adi')}): taslak hazırlayayım mı?",
                            m["metin"][:300], m)
     # sadece görsel/çıkartma olan mesaja taslak yok: içeriğini göremiyoruz, körlemesine cevap uydurmayalım
@@ -243,6 +245,9 @@ def yarim_kalanlari_al():
     kalan = db.oku("SELECT * FROM mesajlar WHERE benden=0 AND eleme IS NULL AND zaman>? ORDER BY zaman",
                    time.time() - 86400)
     for m in kalan:
+        if m["sohbet_id"].endswith(("@newsletter", "@broadcast")):  # kanal/bülten değerlendirilmez
+            db.eleme_kaydet(m["id"], {"atla": "kanal"})
+            continue
         m["grup"] = bool(m["grup"])
         m.pop("eleme", None)
         with _kilit:
@@ -284,6 +289,9 @@ def mesaj(m: dict = Body(...)):
         if not m.get(alan):
             raise HTTPException(400, f"{alan} eksik")
     db.mesaj_kaydet(m)
+    if not m.get("gecmis") and not m["sohbet_id"].endswith(("@newsletter", "@broadcast")):
+        yon = "GİDEN (sen)" if m.get("benden") else "GELEN"
+        log(f"{yon} | {'grup' if m.get('grup') else 'özel'}: {(m.get('sohbet_adi') or '?')[:40]} | {(m.get('gonderen_adi') or '?')[:25]}: {m['metin'][:70]}")
     if m.get("gecmis"):  # ilk bağlantıda alınan eski mesajlar: sadece üslup ve hafıza için, elenmez
         db.eleme_kaydet(m["id"], {"gecmis": True})
         return {"tamam": True}

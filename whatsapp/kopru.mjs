@@ -190,7 +190,7 @@ async function baglan() {
       // teşhis için sadece tür bilgisi (içerik yok): hangi mesaj neden işlenmedi görülsün
       const jid = msg.key.remoteJid || '';
       const neden = !onayli() ? 'onaysiz' : haricMi(jid) ? 'haric' : !msg.message ? 'icerik-yok(sifre cozulemedi?)' : 'islendi';
-      log(`wa olay: ${type} ${jid.split('@')[1] || '?'} ${getContentType(msg.message || {}) || '-'} ${msg.key.fromMe ? 'benden' : 'gelen'} -> ${neden}`);
+      if (neden !== 'islendi') log(`WHATSAPP ATLADI | ${neden === 'haric' ? 'kapalı sohbet, içerik okunmadı' : neden} | ${jid.split('@')[1] || '?'} ${getContentType(msg.message || {}) || '-'}`);
       try {
         if (!onayli() || haricMi(msg.key.remoteJid || '')) continue;  // içerik hiçbir yere gitmez
         if (msg.key.fromMe && msg.message?.reactionMessage?.text) {  // sahibin verdiği tepkiler: hangi emojiyi kullandığını öğrenmek için

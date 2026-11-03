@@ -45,7 +45,7 @@ def kart_getir(kuyruk, sohbet_id, ad, gecmis):
     if kart and kart.get("iliski") != "bilinmiyor":
         return kart
     metin = "\n".join(f"{sahip.AD if m['benden'] else m.get('gonderen_adi') or ad}: {m['metin']}" for m in gecmis[-ayarlar.al("baglam_mesaj"):])
-    tahmin = kuyruk.ekle(Is("eleme", KART_SISTEM, f"Kişi adı (rehber): {ad}\nSohbet:\n{metin}")).bekle(300) or {}
+    tahmin = kuyruk.ekle(Is("eleme", KART_SISTEM, f"Kişi adı (rehber): {ad}\nSohbet:\n{metin}", aciklama=f"Kişi kartı çıkarılıyor: {ad}")).bekle(300) or {}
     return db.kisi_kaydet(sohbet_id, ad=ad, iliski=tahmin.get("iliski") or "bilinmiyor",
                           hitap=tahmin.get("hitap"), sen_siz=tahmin.get("sen_siz"), guven="tahmin")
 
@@ -110,7 +110,7 @@ def hazirla(kuyruk, sohbet_id, sohbet_adi, gelenler, talimat=None):
                   "Tek seçenek yeter.")
     gecerli = {m["id"] for m in gecmis}
     for deneme in range(2):
-        cevap = kuyruk.ekle(Is("taslak", TASLAK_SISTEM, istem)).bekle() or {}
+        cevap = kuyruk.ekle(Is("taslak", TASLAK_SISTEM, istem, aciklama=f"{sohbet_adi}: {len(gelenler)} mesaja cevap" + (" (sahibinin sözlü talimatı)" if talimat else ""))).bekle() or {}
         secenekler = []
         for sec in cevap.get("secenekler") or []:
             if not isinstance(sec, dict):

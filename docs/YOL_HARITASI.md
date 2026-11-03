@@ -52,6 +52,18 @@ Karar: model (Gemma) bölünmez (ağ gecikmesi hızı çökertir); yan işler y�
 - [ ] RAM yükseltmesi: 2×16 GB (eşleşen çift; 24 GB karışık çiftli kanalı bozar). Hız değil kararlılık/önbellek kazandırır.
 - Küçük model (sınıflandırma) Pi/VDS'e kurulmayacak: kural tabanlı eleme (kanal/bülten) aynı işi bedavaya yapıyor.
 
+## Cihaz kontrolü ve hızlı yol
+Karar: "sesi aç", "müziği durdur" gibi basit komutlar Gemma'ya hiç gitmez. Önce kural tabanlı hızlı yol (saniyenin altında, RAM harcamaz); tanınmazsa normal yol. Ayrı bir küçük model şimdilik kurulmayacak: kurallar bu komut türünün büyük kısmını bedavaya çözüyor, HP'nin RAM'i model + Whisper ile dolu, Pi'de yer dar. Kurallar yetmezse (serbest ifadeler) 2. aşamada küçük bir sınıflandırıcı eklenir.
+- [x] Hızlı yol: `core/cihaz.py` (ses aç/kıs/ayarla/sessiz, parlaklık, müzik dur/devam/sonraki/önceki, rahatsız etme) sohbet ve sesli konuşma uç noktalarına bağlı.
+- [x] Mac ajanı: `sunucu/cihaz/mac-ajan.py` + `kur-mac.sh` (port 8097, anahtarlı, sabit işlem listesi; YouTube Music'i Chrome'dan kontrol eder: "en son çalınanı devam ettir").
+- [ ] Mac ajanını kurmak (Mac'te `sh sunucu/cihaz/kur-mac.sh`; Chrome'da Apple Events JavaScript izni; Erişilebilirlik izni; rahatsız etme için "Tulpar Rahatsız Etme Aç/Kapat" Kısayolları).
+- [ ] Telefon: uygulamada yerel modül (ses, parlaklık, rahatsız etme izni) — sunucudan gelen `cihaz` eylemini uygular.
+- [ ] Uygulamada "Cihazlarım" ekranı (aynı komutlar düğmelerle).
+- [ ] Diğer cihazlar (Windows/Linux ajanı, Home Assistant üzerinden Pi'deki akıllı cihazlar).
+
+## Günlük (terminal) okunabilirliği
+- [x] Kuyruk, gelen/giden mesaj, sonuç ve bildirim satırları Türkçe ve düzenli: kim/hangi sohbet, içerik önizlemesi, süre, sırada bekleyen.
+
 ## Notlar
 - Donanım: RAM yükseltmesi ileride (2×32 GB DDR4-3200 SO-DIMM, Çin'den yolcu beraberinde en uygun)
 - Repo şimdilik private; kişisel bilgiler `~/tulpar/veri/sahip.json` içinde, repoda yok
