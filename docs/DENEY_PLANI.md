@@ -33,3 +33,6 @@ Kör puan (Claude, 0-2, strateji adı bilinmeden) / otomatik benzerlik (top1):
 Yorum: A1 (zaten üretimde) eski yönteme göre belirgin iyi; A4 yakın ikinci. Küçük örneklem (n=14), fark yönü anlamlı ama kesin değil.
 Gözlem: tek cevaplı yöntemler (A2, A7) ve iki aşamalı yöntem seçenek çeşitliliğini kaybettiği için geride kaldı; çok seçenek veren yöntemler "karar" vakalarında kazandı.
 Sıradaki: A1+A4 birleşimi, daha fazla vaka (30+), kötü kalıpları (örn. "[video]" yer tutucusu, klavye ezmesi, gereksiz "hocam") süzen kural.
+
+## İkinci tur sonucu (30 vaka, otomatik ölçü)
+B0_temel top1 0.186 / en_iyi 0.206 ile en iyisi; B8_birlesik 0.155 (uzunluk farkı en düşük, 0.46), B10 0.151, B1_benzer 0.147, B4_profil 0.118. Süzgeç (s) skoru değiştirmedi. Karmaşık stratejiler temeli geçmedi (30 vaka: fark gürültü sınırında), bu yüzden core/taslak.py değişmedi. Kör okuma dosyası: HP veri/eval/deney2-kor.md (anahtar deney2-anahtar.json).
