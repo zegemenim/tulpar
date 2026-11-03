@@ -20,8 +20,7 @@ SEMA = {
                        "2 = orta: normalde cevap vereceğin çoğu şey; 3 = yüksek: normalde cevap vereceğin her şey (gruplar ve arkadaş sohbetleri dahil).",
                        2, 1, 3),
     "secenek_sayisi": ("WhatsApp", "Taslak seçenek sayısı",
-                       "Her taslak için kaç cevap seçeneği hazırlansın. İlk birkaçı en olası (tahmin edilebilir) cevaplar, gerisi farklı yönler "
-                       "(kabul, ret, erteleme, karşı soru, şaka...). Çok seçenek model süresini uzatır.", 20, 3, 30),
+                       "Her taslak için kaç cevap seçeneği hazırlansın (karar gerektiren mesajlarda). Fazlası model süresini uzatır.", 3, 2, 8),
     "baglam_mesaj": ("WhatsApp", "Değerlendirmede bağlam (mesaj)",
                      "Bir mesaj değerlendirilirken o sohbetin son kaç mesajı bağlam olarak okunur.", 15, 3, 60),
     "sohbet_gecmis_mesaj": ("Konuşma", "Sohbette hatırlanan mesaj",

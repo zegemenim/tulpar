@@ -42,12 +42,10 @@ TASLAK_SISTEM = sahip.doldur(
 
 
 def sistem():
-    """Taslak istemi; seçenek sayısı ayardan gelir."""
+    """Taslak istemi; seçenek sayısı ayardan gelir (varsayılan 3)."""
     n = ayarlar.al("secenek_sayisi")
-    kural = (f"SEÇENEK SAYISI: yaklaşık {n} seçenek hazırla (en az {max(3, n // 2)}). İlk 4-5 seçenek en OLASI, sahibinin gerçekten yazacağı "
-             "cevaplar olsun (örnek mesajlara ve benzer geçmiş durumlara bakarak). Geri kalanı farklı YÖNLER olsun: kabul, ret, erteleme "
-             "('sonra bakarım'), karşı soru, bilgi isteme, şaka/samimi, çok kısa, biraz uzun, bilmediğim durum. Tekrar eden seçenek yazma. "
-             "Etiketler en fazla 3 kelime; her seçenek çoğunlukla TEK kısa mesaj.")
+    kural = (f"En fazla {n} seçenek hazırla; karar gerekmiyorsa tek seçenek yeter. Seçenekler birbirinden FARKLI yönde olsun "
+             "(örn. kabul / ret / erteleme); en olası olan başta olsun. Etiketler en fazla 3 kelime.")
     return TASLAK_SISTEM.replace("§SECENEK§", kural)
 
 
