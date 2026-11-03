@@ -16,9 +16,14 @@ AJAN_ANAHTAR = (K / "anahtar").read_text().strip()
 
 
 def hp(yol, govde=None):
-    r = urllib.request.Request(HP["adres"] + yol, headers={"x-tulpar-anahtar": HP["anahtar"], "Content-Type": "application/json"},
-                               data=json.dumps(govde).encode() if govde is not None else None)
-    return json.load(urllib.request.urlopen(r, timeout=6))
+    for adres in HP.get("adresler") or [HP["adres"]]:  # Tailscale ya da ev ağı: ilk cevap veren
+        try:
+            r = urllib.request.Request(adres + yol, headers={"x-tulpar-anahtar": HP["anahtar"], "Content-Type": "application/json"},
+                                       data=json.dumps(govde).encode() if govde is not None else None)
+            return json.load(urllib.request.urlopen(r, timeout=5))
+        except Exception:  # noqa: BLE001
+            continue
+    raise ConnectionError("HP yok")
 
 
 HEDEF = {"ad": "mac"}  # menüden seçilen cihaz
@@ -44,7 +49,7 @@ class Menu(rumps.App):
         self.hedef_menu = rumps.MenuItem("Hedef cihaz: mac")
         self.hedef_menu.add(rumps.MenuItem("mac", callback=self.sec))
         self.menu = [
-            "Taslaklar", "Görevler", None, self.hedef_menu,
+            "Taslaklar", "Görevler", "Pano geçmişi", None, self.hedef_menu,
             ("Ses", [rumps.MenuItem("Aç", callback=lambda _: mac("ses_ac")), rumps.MenuItem("Kıs", callback=lambda _: mac("ses_kis")),
                      rumps.MenuItem("Sessiz", callback=lambda _: mac("sessiz"))]),
             ("Müzik", [rumps.MenuItem("Duraklat / Oynat", callback=lambda _: mac("medya_cal")),
@@ -73,16 +78,18 @@ class Menu(rumps.App):
         except Exception:  # noqa: BLE001
             pass
         try:
-            t = hp("/onaylar")
+            t = [x for x in hp("/taslaklar") if x.get("durum") == "bekliyor"]
             g = hp("/gorevler")
+            p = hp("/pano/gecmis?n=10")
         except Exception:  # noqa: BLE001
             self.title = "T!"
             return
         self.title = f"T {len(t)}" if t else "T"
-        self._liste("Taslaklar", [f"{o['veri'].get('kisi') or o['veri'].get('sohbet') or o.get('tur')}: {str(o['veri'].get('metin', ''))[:40]}" for o in t])
-        self._liste("Görevler", [str(x.get("baslik") or x.get("metin") or x)[:50] for x in g])
+        self._liste("Taslaklar", [f"{x.get('sohbet_adi')}: {str(x.get('ozet', ''))[:45]}" for x in t])
+        self._liste("Görevler", [str(x.get("metin"))[:50] for x in g])
+        self._liste("Pano geçmişi", [str(x["metin"]).replace("\n", " ")[:50] for x in p], lambda ad, tam=p: None)
 
-    def _liste(self, ad, satirlar):
+    def _liste(self, ad, satirlar, _=None):
         alt = self.menu[ad]
         alt.clear()
         for s in satirlar[:12] or ["(boş)"]:

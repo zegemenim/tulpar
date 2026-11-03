@@ -92,6 +92,8 @@ def uygula(metin):
         return f"{hedef.capitalize()} henüz bağlı değil; cihaz ajanını kurmam gerekiyor.", None
     if sonuc.startswith("hata"):
         return f"{hedef.capitalize()} cevap vermedi ({sonuc}).", None
+    if not sonuc.startswith(("tamam", "baslatildi", "zaten")):  # ajan işlemi yapamadıysa nedenini söyle
+        return f"{hedef.capitalize()}: {sonuc}", None
     return f"Tamam, {hedef}: {ETIKET[islem]}.", {"tur": "cihaz", "hedef": hedef, "islem": islem, "deger": deger}
 
 

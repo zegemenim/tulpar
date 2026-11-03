@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import * as IntentLauncher from 'expo-intent-launcher';
+import * as Pano from 'expo-clipboard';
 import { istek } from '../../lib/api';
 import { useRenk } from '../../lib/tema';
 
@@ -18,8 +19,10 @@ export default function Cihazlar() {
   const [hedef, setHedef] = useState('mac');
   const [durum, setDurum] = useState('');
   const [sarki, setSarki] = useState('');
+  const [gecmis, setGecmis] = useState<{ metin: string; kaynak: string; zaman: number }[]>([]);
 
   useFocusEffect(useCallback(() => {
+    istek<typeof gecmis>('/pano/gecmis?n=30', undefined, 8000).then(setGecmis).catch(() => {});
     istek<string[]>('/cihaz/liste', undefined, 8000).then((l) => l.length && setCihazlar(l)).catch(() => {});
   }, []));
 
@@ -61,6 +64,14 @@ export default function Cihazlar() {
         </Pressable>
       </View>
       {!!durum && <Text style={{ color: r.soluk }}>Durum: {durum}</Text>}
+      <Text style={{ color: r.soluk, marginTop: 12 }}>Pano geçmişi (7 gün, dokununca kopyalanır)</Text>
+      {gecmis.length === 0 && <Text style={{ color: r.soluk }}>(boş)</Text>}
+      {gecmis.map((g) => (
+        <Pressable key={g.zaman} onPress={() => Pano.setStringAsync(g.metin)} style={[s.dugme, { backgroundColor: r.kart, borderColor: r.cizgi }]}>
+          <Text numberOfLines={2} style={{ color: r.yazi }}>{g.metin}</Text>
+          <Text style={{ color: r.soluk, fontSize: 11 }}>{g.kaynak} · {new Date(g.zaman * 1000).toLocaleString('tr-TR')}</Text>
+        </Pressable>
+      ))}
       <Text style={{ color: r.soluk, marginTop: 12 }}>Bu telefonun izinleri (bir kez ver)</Text>
       <View style={s.satir}>
         <Pressable onPress={() => ayar('android.settings.action.MANAGE_WRITE_SETTINGS', 'package:dev.tulpar.app')} style={[s.dugme, { backgroundColor: r.kart, borderColor: r.cizgi }]}>

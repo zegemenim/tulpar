@@ -173,6 +173,11 @@ def pano_oku():
     return pano.oku()
 
 
+@router.get("/pano/gecmis")
+def pano_gecmis(n: int = 50):
+    return pano.gecmis(min(n, 500))
+
+
 @router.post("/pano")
 def pano_yaz(govde: dict = Body(...)):
     return {"kabul": pano.yaz(str(govde.get("metin", "")), str(govde.get("kaynak", "?")))}

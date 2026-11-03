@@ -31,11 +31,57 @@ def ytm_js(js):
   end repeat
   return "yok"
 end tell'''
-    return osa(kod).stdout.strip()
+    r = osa(kod)
+    if "turned off" in r.stderr:
+        return "js_izni_yok"
+    return r.stdout.strip()
+
+
+JXA_TUS = """ObjC.import('Cocoa');
+function tus(k, asagi) {
+  var e = $.NSEvent.otherEventWithTypeLocationModifierFlagsTimestampWindowNumberContextSubtypeData1Data2(
+    14, {x: 0, y: 0}, asagi ? 0xa00 : 0xb00, 0, 0, 0, 8, (k << 16) | ((asagi ? 0xa : 0xb) << 8), -1);
+  $.CGEventPost(0, e.CGEvent);
+}
+tus(KOD, true); tus(KOD, false);"""
+TUSLAR = {"cal": 16, "sonraki": 17, "onceki": 18}
+
+
+def medya_tusu(ad):
+    """Sistem medya tuşu (Chrome JavaScript izni gerekmez; çalan YouTube Music sekmesi tuşu alır)."""
+    subprocess.run(["osascript", "-l", "JavaScript", "-e", JXA_TUS.replace("KOD", str(TUSLAR[ad]))], capture_output=True, timeout=10)
+    return "tamam (medya tuşu)"
+
+
+def ytm_sekmesi_var():
+    """Chrome'da YouTube Music sekmesi açık mı (JavaScript izni gerekmez)?"""
+    r = osa(f'''tell application "Google Chrome"
+  repeat with w in windows
+    repeat with t in tabs of w
+      if URL of t contains "{YTM}" then return "var"
+    end repeat
+  end repeat
+  return "yok"
+end tell''')
+    return r.stdout.strip() == "var"
+
+
+def medya(js, tus):
+    sonuc = ytm_js(js)
+    if sonuc == "js_izni_yok":
+        if ytm_sekmesi_var():
+            return medya_tusu(tus)
+        return "YouTube Music açık değil"
+    if sonuc == "yok":
+        return "YouTube Music açık değil"
+    return sonuc or "tamam"
 
 
 def ytm_ac_ve_devam():
-    if ytm_js("1") == "yok":
+    durum = ytm_js("1")
+    if durum == "js_izni_yok":
+        return "Chrome'da Görünüm > Geliştirici > Apple Events'ten JavaScript'e İzin Ver açılmalı"
+    if durum == "yok":
         osa(f'tell application "Google Chrome" to open location "https://{YTM}"')
         time.sleep(8)  # sayfa ve son çalınan yüklensin
     sonuc = ytm_js("(document.querySelector('#play-pause-button').title||'').toLowerCase().includes('oynat')||(document.querySelector('#play-pause-button').title||'').toLowerCase().includes('play')?(document.querySelector('#play-pause-button').click(),'baslatildi'):'zaten calisiyor'")
@@ -61,21 +107,19 @@ def islem(ad, deger):
     elif ad == "sessiz":
         osa("set volume with output muted")
     elif ad in ("medya_dur", "medya_cal"):
-        return ytm_js("document.querySelector('#play-pause-button').click()") or "tamam"
+        return medya("document.querySelector('#play-pause-button').click()", "cal")
     elif ad == "sarki_cal":
         return ytm_sarki_cal(deger)
     elif ad == "medya_devam":
         return ytm_ac_ve_devam()
     elif ad == "medya_sonraki":
-        return ytm_js("document.querySelector('.next-button').click()") or "tamam"
+        return medya("document.querySelector('.next-button').click()", "sonraki")
     elif ad == "medya_onceki":
-        return ytm_js("document.querySelector('.previous-button').click()") or "tamam"
+        return medya("document.querySelector('.previous-button').click()", "onceki")
     elif ad == "parlaklik_ac":
-        for _ in range(4):
-            tus(144)
+        tus(144)  # klavyedeki tek basış gibi: tek adım
     elif ad == "parlaklik_kis":
-        for _ in range(4):
-            tus(145)
+        tus(145)
     elif ad == "rahatsiz_etme_ac":
         return kisayol("Tulpar Rahatsız Etme Aç")
     elif ad == "rahatsiz_etme_kapat":
@@ -121,7 +165,17 @@ def pano_esitle():
     if not yol.exists():
         return
     hp = json.loads(yol.read_text())
+    adresler = hp.get("adresler") or [hp.get("adres", "")]
     baslik = {"x-tulpar-anahtar": hp["anahtar"], "Content-Type": "application/json"}
+
+    def git(yol_, govde=None):  # ilk cevap veren adres (Tailscale / ev ağı)
+        for ad in adresler:
+            try:
+                r = urllib.request.Request(ad + yol_, headers=baslik, data=json.dumps(govde).encode() if govde is not None else None)
+                return json.load(urllib.request.urlopen(r, timeout=4))
+            except Exception:  # noqa: BLE001
+                continue
+        raise ConnectionError("HP yok")
     son = subprocess.run(["pbpaste"], capture_output=True, text=True).stdout
     while True:
         time.sleep(2)
@@ -129,10 +183,9 @@ def pano_esitle():
             simdi = subprocess.run(["pbpaste"], capture_output=True, text=True).stdout
             if simdi != son and simdi.strip():
                 son = simdi
-                urllib.request.urlopen(urllib.request.Request(hp["adres"] + "/pano", method="POST", headers=baslik,
-                                       data=json.dumps({"metin": simdi, "kaynak": "mac"}).encode()), timeout=5)
+                git("/pano", {"metin": simdi, "kaynak": "mac"})
             else:
-                r = json.load(urllib.request.urlopen(urllib.request.Request(hp["adres"] + "/pano", headers=baslik), timeout=5))
+                r = git("/pano")
                 if r["metin"] and r["kaynak"] != "mac" and r["metin"] != son:
                     son = r["metin"]
                     subprocess.run(["pbcopy"], input=son, text=True)
