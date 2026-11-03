@@ -121,6 +121,78 @@ class CihazServisi : Service() {
 }
 `;
 
+const DINLEYICI = (p) => `package ${p}
+
+import android.app.Notification
+import android.service.notification.NotificationListenerService
+import android.service.notification.StatusBarNotification
+import android.util.Log
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+
+// Telefona gelen bildirimleri (banka SMS'i, kargo, uygulama uyarıları) HP'ye iletir. Kullanıcı bir kez "Bildirim erişimi" verir.
+// WhatsApp zaten köprüden geliyor, kalıcı/ilerleme bildirimleri anlamsız: ikisi de atlanır. Doğrulama kodlarını sunucu süzer.
+class BildirimDinleyici : NotificationListenerService() {
+  companion object {
+    private val tampon = ArrayList<JSONObject>()
+    @Volatile private var gonderici = false
+    private val ATLA = setOf("com.whatsapp", "com.whatsapp.w4b", "dev.tulpar.app", "android", "com.android.systemui")
+  }
+
+  override fun onNotificationPosted(sbn: StatusBarNotification) {
+    val n = sbn.notification
+    if (sbn.packageName in ATLA || sbn.isOngoing || (n.flags and Notification.FLAG_GROUP_SUMMARY) != 0) return
+    if (n.category == Notification.CATEGORY_TRANSPORT || n.category == Notification.CATEGORY_PROGRESS || n.category == Notification.CATEGORY_CALL) return
+    val e = n.extras
+    val baslik = e.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
+    val metin = (e.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: e.getCharSequence(Notification.EXTRA_TEXT))?.toString() ?: ""
+    if (baslik.isBlank() && metin.isBlank()) return
+    val pk = sbn.packageName
+    val tur = if (pk.contains("sms") || pk.contains("mms") || pk.contains("messaging")) "sms" else "bildirim"
+    synchronized(tampon) {
+      if (tampon.size >= 500) tampon.removeAt(0)
+      tampon.add(JSONObject().put("paket", sbn.packageName).put("baslik", baslik).put("metin", metin).put("tur", tur).put("zaman", sbn.postTime / 1000.0))
+    }
+    baslat()
+  }
+
+  private fun baslat() {
+    if (gonderici) return
+    gonderici = true
+    val ctx = applicationContext
+    Thread {
+      while (true) {
+        Thread.sleep(15000)
+        try { gonder(ctx) } catch (e: Exception) { Log.w("Tulpar", "bildirim gönderilemedi: " + e.message) }
+      }
+    }.start()
+  }
+
+  private fun gonder(ctx: android.content.Context) {
+    val paket = synchronized(tampon) { if (tampon.isEmpty()) return; ArrayList(tampon) }
+    val ayar = File(ctx.filesDir, "sunucu.json")
+    if (!ayar.exists()) return
+    val j = JSONObject(ayar.readText())
+    val adresler = j.getJSONArray("adresler")
+    val govde = JSONObject().put("liste", JSONArray(paket)).toString().toByteArray()
+    for (i in 0 until adresler.length()) {
+      try {
+        val b = URL(adresler.getString(i).trimEnd('/') + "/bildirim").openConnection() as HttpURLConnection
+        b.connectTimeout = 3000; b.readTimeout = 5000; b.requestMethod = "POST"; b.doOutput = true
+        b.setRequestProperty("x-tulpar-anahtar", j.getString("anahtar")); b.setRequestProperty("Content-Type", "application/json")
+        b.outputStream.use { it.write(govde) }
+        if (b.responseCode != 200) continue
+        synchronized(tampon) { tampon.removeAll(paket.toSet()) }  // gönderilenler çıkar, bu arada gelenler kalır
+        return
+      } catch (e: Exception) { continue }
+    }
+  }
+}
+`;
+
 const ALICI = (p) => `package ${p}
 
 import android.content.BroadcastReceiver
@@ -144,6 +216,7 @@ module.exports = function cihaz(config) {
     fs.writeFileSync(path.join(klasor, 'CihazKomutu.kt'), KOTLIN(paket));
     fs.writeFileSync(path.join(klasor, 'CihazServisi.kt'), SERVIS(paket));
     fs.writeFileSync(path.join(klasor, 'CihazAlici.kt'), ALICI(paket));
+    fs.writeFileSync(path.join(klasor, 'BildirimDinleyici.kt'), DINLEYICI(paket));
     return c;
   }]);
   config = withMainActivity(config, (c) => {
@@ -164,6 +237,10 @@ module.exports = function cihaz(config) {
     if (!app.service.some((x) => x.$['android:name'] === '.CihazServisi')) {
       app.service.push({ $: { 'android:name': '.CihazServisi', 'android:exported': 'false', 'android:foregroundServiceType': 'specialUse' },
         property: [{ $: { 'android:name': 'android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE', 'android:value': 'remote_device_control' } }] });
+    }
+    if (!app.service.some((x) => x.$['android:name'] === '.BildirimDinleyici')) {
+      app.service.push({ $: { 'android:name': '.BildirimDinleyici', 'android:exported': 'true', 'android:label': 'Tulpar bildirim okuma', 'android:permission': 'android.permission.BIND_NOTIFICATION_LISTENER_SERVICE' },
+        'intent-filter': [{ action: [{ $: { 'android:name': 'android.service.notification.NotificationListenerService' } }] }] });
     }
     app.receiver = app.receiver || [];
     if (!app.receiver.some((x) => x.$['android:name'] === '.CihazAlici')) {

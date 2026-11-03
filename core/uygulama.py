@@ -14,6 +14,7 @@ import ayarlar
 import db
 import llm
 import ozet
+import bildirim
 import pano
 import sahip
 import cihaz
@@ -197,6 +198,19 @@ def pano_gecmis(n: int = 50):
 @router.post("/pano")
 def pano_yaz(govde: dict = Body(...)):
     return {"kabul": pano.yaz(str(govde.get("metin", "")), str(govde.get("kaynak", "?")))}
+
+
+@router.post("/bildirim")
+def bildirim_yaz(govde: dict = Body(...)):
+    """Telefondan gelen bildirim/SMS toplu listesi: [{paket, baslik, metin, tur, zaman}]; OTP süzülür."""
+    kabul = sum(bildirim.yaz(str(x.get("paket", "?")), x.get("baslik"), x.get("metin"), str(x.get("tur", "bildirim")), x.get("zaman"))
+                for x in (govde.get("liste") or [])[:200])
+    return {"kabul": kabul}
+
+
+@router.get("/bildirim")
+def bildirim_liste(n: int = 100, tur: str = "", paket: str = ""):
+    return bildirim.liste(min(n, 1000), tur or None, paket or None)
 
 
 @router.get("/gorevler")

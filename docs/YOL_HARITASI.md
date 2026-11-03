@@ -23,6 +23,9 @@ Sahibinin istekleri ve kararları. Biten işler işaretlenir; yenileri eklendik�
    - Bot koruması (CAPTCHA) çıkarsa: bildirim gönder, sahibi telefondan Ekran sayfasında çözer, Tulpar devam eder
 4. **Claude Code köprüsü**: HP'de Claude Code (Pro), `claude_kod(görev, klasör)` aracı; projeleri çalıştırıp test eder, GitHub'dan çeker; silme/yayın/push öncesi sorar; Pro limitini %80'de uyarır, %20 önemli işlere
 5. **Telefon bildirimleri ve SMS okuma**; OTP kodları saklanmaz
+   - [x] Sunucu: `core/bildirim.py`, `POST/GET /bildirim` (30 gün, OTP süzgeci, tekrar yok sayma, testli); HP'ye kuruldu
+   - [x] Uygulama: `BildirimDinleyici` (WhatsApp ve kalıcı bildirimler atlanır, SMS uygulamasından gelenler `sms` türü), Cihazlar sekmesinde "Bildirim erişimi" düğmesi → APK 23'te (toplu derleme)
+   - [ ] Bildirimlerden özet/görev çıkarma ve Mac menüsünde gösterme; sonra #6 para analizi
 6. **Aylık para analizi**: banka SMS'lerinden harcama özeti, "ne aldın / gerekli miydi", gelirle bütçe ve birikim hedefleri (yatırım tavsiyesi değil)
 7. **Gmail** (5-6 e-posta hesabı Gmail'e yönlendirilip bağlanacak)
 8. **Telefon görüşmeleri**: kayıt klasöründen yazıya dök, konuşmacı ayır, sahibinin sesini tanı, görev/takvim çıkar; konuşma üslubunu ve ses tonunu öğren
