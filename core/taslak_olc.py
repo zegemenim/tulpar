@@ -19,7 +19,7 @@ CIKTI = pathlib.Path.home() / "tulpar/veri/eval/taslak-olc.json"
 def vaka_sec():
     rastgele = random.Random(7)
     adaylar = db.oku("""SELECT m.id, m.sohbet_id, m.metin, m.zaman FROM mesajlar m WHERE m.benden=1 AND length(m.metin) BETWEEN 3 AND 150
-                        AND m.zaman < strftime('%s','now') - 86400 AND m.grup=0""")
+                        AND m.zaman < strftime('%s','now') - 86400 AND m.grup=0 AND m.metin NOT LIKE '[%' AND m.metin NOT LIKE '%http%'""")
     rastgele.shuffle(adaylar)
     sonuc, sohbetler = [], set()
     for a in adaylar:
