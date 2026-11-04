@@ -96,6 +96,18 @@ def dugme_satiri(baslik, dugmeler):
     return oge
 
 
+def metin_ogesi(metin):
+    """Uzun metni satırlara bölerek gösteren menü öğesi."""
+    alan = NSTextField.wrappingLabelWithString_(metin[:1500])
+    yukseklik = alan.cell().cellSizeForBounds_(NSMakeRect(0, 0, 400, 10000)).height
+    alan.setFrame_(NSMakeRect(14, 5, 400, yukseklik))
+    gorunum = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 428, yukseklik + 10))
+    gorunum.addSubview_(alan)
+    oge = rumps.MenuItem("Tam metin")
+    oge._menuitem.setView_(gorunum)
+    return oge
+
+
 class Menu(rumps.App):
     def __init__(self):
         super().__init__("T", quit_button="Çık")
@@ -148,20 +160,24 @@ class Menu(rumps.App):
             if ad not in self.hedef_menu:
                 self.hedef_menu.add(rumps.MenuItem(ad, callback=self.sec))
         self.title = f"T {len(t)}" if t else "T"
-        self._liste("Taslaklar", [f"{x.get('sohbet_adi')}: {str(x.get('ozet', ''))[:45]}" for x in t])
-        self._liste("Görevler", [str(x.get("metin"))[:50] for x in g])
-        self._liste("WhatsApp özeti", [("⚠ " if x["cevap_gerekli"] else "") + f"{x['ad']}: {x['ozet']}"[:70] for x in oz.get("sohbetler", [])])
+        self._liste("Taslaklar", [f"{x.get('sohbet_adi')}: {str(x.get('ozet', ''))[:45]}" for x in t], [f"{x.get('sohbet_adi')}\n{x.get('ozet', '')}" for x in t])
+        self._liste("Görevler", [str(x.get("metin"))[:50] for x in g], [str(x.get("metin")) for x in g])
+        self._liste("WhatsApp özeti", [("⚠ " if x["cevap_gerekli"] else "") + f"{x['ad']}: {x['ozet']}"[:70] for x in oz.get("sohbetler", [])],
+                    [f"{x['ad']}\n{x['ozet']}" + (f"\n\nYapılacak: {x['ne']}" if x.get("ne") else "") for x in oz.get("sohbetler", [])])
         self._liste("Telefon bildirimleri", [f"{x['baslik'] or x['paket'].split('.')[-1]}: {x['metin']}".replace("\n", " ")[:70] for x in bi], [f"{x['baslik']}\n{x['metin']}".strip() for x in bi])
         self._liste("Pano geçmişi", [str(x["metin"]).replace("\n", " ")[:50] for x in p], [str(x["metin"]) for x in p])
 
-    def _liste(self, ad, satirlar, kopyalanacak=None):
-        """kopyalanacak verilirse satıra tıklayınca o metin Mac panosuna alınır."""
+    def _liste(self, ad, satirlar, tamlar=None):
+        """tamlar verilirse satırın üstüne gelince tam metin açılır; altındaki Kopyala Mac panosuna alır."""
         alt = self.menu[ad]
         if alt._menu is not None:  # alt menüsü henüz yoksa rumps clear() hata verir
             alt.clear()
         for i, s in enumerate(satirlar[:12] or ["(boş)"]):
-            tam = kopyalanacak[i] if kopyalanacak and satirlar else None
-            alt.add(rumps.MenuItem(s, callback=(lambda _, t=tam: kopyala(t)) if tam else None))
+            oge = rumps.MenuItem(s)
+            if tamlar and satirlar:
+                oge.add(metin_ogesi(tamlar[i]))
+                oge.add(rumps.MenuItem("Kopyala", callback=lambda _, t=tamlar[i]: kopyala(t)))
+            alt.add(oge)
 
 
 Menu().run()
