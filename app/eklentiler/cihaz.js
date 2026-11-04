@@ -16,6 +16,7 @@ import android.content.Intent
 import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
@@ -33,6 +34,8 @@ object CihazKomutu {
   fun baslat(ctx: Context) {
     if (calisiyor) return
     calisiyor = true
+    // Ekran kapalıyken de komut alabilsin: işlemci uyumaz (pil tüketir; Doze için uygulama pil kısıtlamasız olmalı)
+    (ctx.applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "tulpar:cihaz").apply { setReferenceCounted(false); acquire() }
     Thread {
       while (true) {
         try { yokla(ctx.applicationContext) } catch (e: Exception) { Log.w("Tulpar", "cihaz komutu: " + e.message) }
@@ -271,7 +274,7 @@ module.exports = function cihaz(config) {
   return withAndroidManifest(config, (c) => {
     const m = c.modResults.manifest;
     m['uses-permission'] = m['uses-permission'] || [];
-    for (const izin of ['android.permission.RECEIVE_BOOT_COMPLETED', 'android.permission.FOREGROUND_SERVICE', 'android.permission.FOREGROUND_SERVICE_SPECIAL_USE', 'android.permission.MODIFY_AUDIO_SETTINGS', 'android.permission.WRITE_SETTINGS', 'android.permission.ACCESS_NOTIFICATION_POLICY']) {
+    for (const izin of ['android.permission.RECEIVE_BOOT_COMPLETED', 'android.permission.WAKE_LOCK', 'android.permission.FOREGROUND_SERVICE', 'android.permission.FOREGROUND_SERVICE_SPECIAL_USE', 'android.permission.MODIFY_AUDIO_SETTINGS', 'android.permission.WRITE_SETTINGS', 'android.permission.ACCESS_NOTIFICATION_POLICY']) {
       if (!m['uses-permission'].some((x) => x.$['android:name'] === izin)) m['uses-permission'].push({ $: { 'android:name': izin } });
     }
     const app = m.application[0];
