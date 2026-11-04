@@ -20,12 +20,18 @@ except FileNotFoundError:
 AJAN_ANAHTAR = (K / "anahtar").read_text().strip()
 
 
+SON_ADRES = {"adres": None}
+
+
 def hp(yol, govde=None):
-    for adres in HP.get("adresler") or [HP["adres"]]:  # Tailscale ya da ev ağı: ilk cevap veren
+    adresler = HP.get("adresler") or [HP["adres"]]  # Tailscale ya da ev ağı: ilk cevap veren; son çalışan önce denenir
+    for adres in sorted(adresler, key=lambda a: a != SON_ADRES["adres"]):
         try:
             r = urllib.request.Request(adres + yol, headers={"x-tulpar-anahtar": HP["anahtar"], "Content-Type": "application/json"},
                                        data=json.dumps(govde).encode() if govde is not None else None)
-            return json.load(urllib.request.urlopen(r, timeout=5))
+            sonuc = json.load(urllib.request.urlopen(r, timeout=4))
+            SON_ADRES["adres"] = adres
+            return sonuc
         except Exception:  # noqa: BLE001
             continue
     raise ConnectionError("HP yok")
@@ -93,6 +99,7 @@ def dugme_satiri(baslik, dugmeler):
 class Menu(rumps.App):
     def __init__(self):
         super().__init__("T", quit_button="Çık")
+        self._gelen, self._getiriliyor = None, False
         self.hedef_menu = rumps.MenuItem("Hedef cihaz: mac")
         self.hedef_menu.add(rumps.MenuItem("mac", callback=self.sec))
         self.menu = [
@@ -112,26 +119,34 @@ class Menu(rumps.App):
         HEDEF["ad"] = oge.title
         self.hedef_menu.title = f"Hedef cihaz: {oge.title}"
 
+    def _getir(self):
+        """Ağ işi arka planda: ulaşılamayan adres menüyü dondurmasın. Menü ana iş parçacığında (uygula) güncellenir."""
+        try:
+            self._gelen = {"cihazlar": hp("/cihaz/liste"), "t": [x for x in hp("/taslaklar") if x.get("durum") == "bekliyor"], "g": hp("/gorevler"),
+                           "p": hp("/pano/gecmis?n=10"), "oz": hp("/ozet"), "bi": hp("/bildirim?n=15&onemli=true")}
+        except Exception:  # noqa: BLE001
+            self._gelen = {}
+        finally:
+            self._getiriliyor = False
+
     @rumps.timer(30)
     def yenile(self, _=None):
-        if HP is None:
+        if HP is not None and not self._getiriliyor:
+            self._getiriliyor = True
+            threading.Thread(target=self._getir, daemon=True).start()
+
+    @rumps.timer(1)
+    def uygula(self, _=None):
+        v, self._gelen = self._gelen, None
+        if v is None:
             return
-        try:
-            alt = self.hedef_menu
-            for ad in hp("/cihaz/liste"):
-                if ad not in alt:
-                    alt.add(rumps.MenuItem(ad, callback=self.sec))
-        except Exception:  # noqa: BLE001
-            pass
-        try:
-            t = [x for x in hp("/taslaklar") if x.get("durum") == "bekliyor"]
-            g = hp("/gorevler")
-            p = hp("/pano/gecmis?n=10")
-            oz = hp("/ozet")
-            bi = hp("/bildirim?n=15&onemli=true")
-        except Exception:  # noqa: BLE001
+        if not v:
             self.title = "T!"
             return
+        t, g, p, oz, bi = v["t"], v["g"], v["p"], v["oz"], v["bi"]
+        for ad in v["cihazlar"]:
+            if ad not in self.hedef_menu:
+                self.hedef_menu.add(rumps.MenuItem(ad, callback=self.sec))
         self.title = f"T {len(t)}" if t else "T"
         self._liste("Taslaklar", [f"{x.get('sohbet_adi')}: {str(x.get('ozet', ''))[:45]}" for x in t])
         self._liste("Görevler", [str(x.get("metin"))[:50] for x in g])
@@ -142,7 +157,8 @@ class Menu(rumps.App):
     def _liste(self, ad, satirlar, kopyalanacak=None):
         """kopyalanacak verilirse satıra tıklayınca o metin Mac panosuna alınır."""
         alt = self.menu[ad]
-        alt.clear()
+        if alt._menu is not None:  # alt menüsü henüz yoksa rumps clear() hata verir
+            alt.clear()
         for i, s in enumerate(satirlar[:12] or ["(boş)"]):
             tam = kopyalanacak[i] if kopyalanacak and satirlar else None
             alt.add(rumps.MenuItem(s, callback=(lambda _, t=tam: kopyala(t)) if tam else None))
