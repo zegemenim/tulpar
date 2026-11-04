@@ -29,7 +29,7 @@ Sahibinin istekleri ve kararları. Biten işler işaretlenir; yenileri eklendik�
    - [x] Doğrulama kodu: SMS/bildirimden gerçek kod seçilir (kod sözcüğünden sonra gelen; tutar, referans, B1245 gibi harf önekli numara, yıl elenir), panoya 10 dk konur (Mac'e de eşitlenir, telefon kendi panosuna da yazar), geçmişten silinir, `bildirim.jsonl`'a yazılmaz
    - [x] Mac menüsünde "Telefon bildirimleri" (önemli olanlar: SMS, para/kargo/randevu/güvenlik)
    - [ ] Bildirimlerden özet/görev çıkarma ve Mac menüsünde gösterme; sonra #6 para analizi
-6. **Aylık para analizi**: banka SMS'lerinden harcama özeti, "ne aldın / gerekli miydi", gelirle bütçe ve birikim hedefleri (yatırım tavsiyesi değil)
+6. **Aylık para analizi** — [x] 1. aşama: `core/para.py` banka SMS/bildiriminden işlemi çıkarır, `GET /para?ay=YYYY-AA` toplam verir; gerçek banka SMS'iyle henüz denenmedi. Kalan: "ne aldın / gerekli miydi", bütçe: banka SMS'lerinden harcama özeti, "ne aldın / gerekli miydi", gelirle bütçe ve birikim hedefleri (yatırım tavsiyesi değil)
 7. **Gmail** (5-6 e-posta hesabı Gmail'e yönlendirilip bağlanacak)
 8. **Telefon görüşmeleri**: kayıt klasöründen yazıya dök, konuşmacı ayır, sahibinin sesini tanı, görev/takvim çıkar; konuşma üslubunu ve ses tonunu öğren
 9. **Fotoğraf/çıkartma anlama** (Gemma görüntü desteği)

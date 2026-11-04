@@ -3,8 +3,10 @@ import pathlib
 import tempfile
 
 import bildirim
+import para
 
 bildirim.DOSYA = pathlib.Path(tempfile.mkdtemp()) / "b.jsonl"
+para.DOSYA = bildirim.DOSYA.with_name("p.jsonl")
 
 OTP = ["Doğrulama kodunuz: 482913", "Your verification code is 5521", "Şifreniz 123456, kimseyle paylaşmayın",
        "3D Secure onay kodu 904215 ile 250,00 TL işlem"]

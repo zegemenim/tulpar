@@ -14,6 +14,7 @@ import ayarlar
 import db
 import llm
 import ozet
+import para
 import bildirim
 import claude_kod
 import pano
@@ -242,6 +243,11 @@ def bildirim_yaz(govde: dict = Body(...)):
             continue
         kabul += bildirim.yaz(str(x.get("paket", "?")), x.get("baslik"), x.get("metin"), str(x.get("tur", "bildirim")), x.get("zaman"))
     return {"kabul": kabul, "kod": kod}
+
+
+@router.get("/para")
+def para_ozet(ay: str = ""):
+    return para.aylik(ay or None)
 
 
 @router.get("/bildirim")

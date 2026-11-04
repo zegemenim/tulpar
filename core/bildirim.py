@@ -6,10 +6,13 @@ import re
 import threading
 import time
 
+import para
+
 DOSYA = pathlib.Path.home() / "tulpar/veri/bildirim.jsonl"
 SAKLAMA_SN = 30 * 86400
 SINIR = 600  # tek bildirimin saklanan en uzun metni
 TEKRAR_SN = 90  # aynı bildirim bu süre içinde ikinci kez gelirse yok sayılır
+SMS_PAKET = re.compile(r"sms|mms|messag", re.I)
 _kilit = threading.Lock()
 _son = {}  # (paket, baslik, metin) -> zaman
 
@@ -69,6 +72,8 @@ def yaz(paket, baslik, metin, tur="bildirim", zaman=None):
     baslik, metin = (baslik or "").strip()[:200], (metin or "").strip()[:SINIR]
     if not (baslik or metin) or kod_iceriyor(f"{baslik} {metin}"):
         return False
+    if SMS_PAKET.search(paket or ""):
+        tur = "sms"  # üretici SMS uygulamaları (com.transsion.smartmessage) telefonda "sms" diye tanınmayabilir
     simdi = time.time()
     anahtar = (paket, baslik, metin)
     with _kilit:
@@ -81,6 +86,7 @@ def yaz(paket, baslik, metin, tur="bildirim", zaman=None):
         DOSYA.parent.mkdir(parents=True, exist_ok=True)
         DOSYA.write_text("\n".join(json.dumps(x, ensure_ascii=False) for x in g) + "\n")
         DOSYA.chmod(0o600)
+    para.isle(paket, baslik, metin, zaman or simdi)
     return True
 
 
@@ -89,7 +95,7 @@ ONEMLI = re.compile(r"harcama|ödeme|odeme|fatura|borç|borc|kargo|teslim|randev
 
 def onemli(x):
     """SMS'ler ve para/kargo/randevu/güvenlik gibi anlamlı bildirimler; reklam ve uygulama gürültüsü değil."""
-    return x["tur"] == "sms" or bool(ONEMLI.search(f"{x['baslik']} {x['metin']}"))
+    return x["tur"] == "sms" or bool(SMS_PAKET.search(x.get("paket") or "")) or bool(ONEMLI.search(f"{x['baslik']} {x['metin']}"))
 
 
 def liste(n=100, tur=None, paket=None, sadece_onemli=False):

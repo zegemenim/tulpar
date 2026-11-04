@@ -184,7 +184,7 @@ class BildirimDinleyici : NotificationListenerService() {
     val metin = (e.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: e.getCharSequence(Notification.EXTRA_TEXT))?.toString() ?: ""
     if (baslik.isBlank() && metin.isBlank()) return
     val pk = sbn.packageName
-    val tur = if (pk.contains("sms") || pk.contains("mms") || pk.contains("messaging")) "sms" else "bildirim"
+    val tur = if (pk.contains("sms") || pk.contains("mms") || pk.contains("messag")) "sms" else "bildirim"
     synchronized(tampon) {
       if (tampon.size >= 500) tampon.removeAt(0)
       tampon.add(JSONObject().put("paket", sbn.packageName).put("baslik", baslik).put("metin", metin).put("tur", tur).put("zaman", sbn.postTime / 1000.0))
