@@ -37,7 +37,7 @@ def hp(yol, govde=None):
     raise ConnectionError("HP yok")
 
 
-HEDEF = {"ad": "mac"}  # menüden seçilen cihaz
+HEDEF = {"ad": "telefon" if HP else "mac"}  # menüden seçilen cihaz
 
 
 def mac(islem, deger=None):
@@ -112,7 +112,7 @@ class Menu(rumps.App):
     def __init__(self):
         super().__init__("T", quit_button="Çık")
         self._gelen, self._getiriliyor = None, False
-        self.hedef_menu = rumps.MenuItem("Hedef cihaz: mac")
+        self.hedef_menu = rumps.MenuItem(f"Hedef cihaz: {HEDEF['ad']}")
         self.hedef_menu.add(rumps.MenuItem("mac", callback=self.sec))
         self.menu = [
             "Taslaklar", "Görevler", "WhatsApp özeti", "Telefon bildirimleri", "Pano geçmişi", None,

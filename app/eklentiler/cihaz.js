@@ -11,9 +11,13 @@ import android.app.NotificationManager
 import android.app.SearchManager
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
+import android.media.session.MediaController
+import android.media.session.MediaSessionManager
+import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
@@ -88,16 +92,27 @@ object CihazKomutu {
     fun medya(tus: Int) {
       ses.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, tus)); ses.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, tus))
     }
+    // Duraklatılmış YT Music tuş olayıyla devam etmiyor: oturuma doğrudan komut verilir (bildirim erişimi gerekir), olmazsa tuşa düşülür
+    fun oturum(): MediaController? = try {
+      val liste = (ctx.getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager).getActiveSessions(ComponentName(ctx, BildirimDinleyici::class.java))
+      liste.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
+        ?: liste.firstOrNull { it.packageName == "com.google.android.apps.youtube.music" } ?: liste.firstOrNull()
+    } catch (e: Exception) { Log.w("Tulpar", "medya oturumu: " + e.message); null }
+    fun kontrol(tus: Int, is_: (MediaController.TransportControls) -> Unit) {
+      val c = oturum()
+      if (c != null) is_(c.transportControls) else medya(tus)
+    }
     val deger = if (k.isNull("deger")) null else k.get("deger")
     when (val islem = k.getString("islem")) {
       "ses_ac" -> ses.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, 0)
       "ses_kis" -> ses.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, 0)
       "sessiz" -> ses.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
       "ses_ayar" -> ses.setStreamVolume(AudioManager.STREAM_MUSIC, ses.getStreamMaxVolume(AudioManager.STREAM_MUSIC) * (deger.toString().toDoubleOrNull() ?: 50.0).toInt() / 100, 0)
-      "medya_cal", "medya_dur" -> medya(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
-      "medya_devam" -> medya(KeyEvent.KEYCODE_MEDIA_PLAY)
-      "medya_sonraki" -> medya(KeyEvent.KEYCODE_MEDIA_NEXT)
-      "medya_onceki" -> medya(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+      "medya_cal" -> kontrol(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) { t -> if (oturum()?.playbackState?.state == PlaybackState.STATE_PLAYING) t.pause() else t.play() }
+      "medya_dur" -> kontrol(KeyEvent.KEYCODE_MEDIA_PAUSE) { it.pause() }
+      "medya_devam" -> kontrol(KeyEvent.KEYCODE_MEDIA_PLAY) { it.play() }
+      "medya_sonraki" -> kontrol(KeyEvent.KEYCODE_MEDIA_NEXT) { it.skipToNext() }
+      "medya_onceki" -> kontrol(KeyEvent.KEYCODE_MEDIA_PREVIOUS) { it.skipToPrevious() }
       "parlaklik_ac", "parlaklik_kis", "parlaklik_ayar" -> {
         if (!Settings.System.canWrite(ctx)) { Log.w("Tulpar", "parlaklık izni yok"); return }
         val simdi = Settings.System.getInt(ctx.contentResolver, Settings.System.SCREEN_BRIGHTNESS, 128)
