@@ -5,6 +5,7 @@ Telefon komutları (ses, parlaklık, rahatsız etme) uygulamada çalışır: sun
 import json
 import pathlib
 import re
+import time
 import urllib.request
 
 from kuyruk import log
@@ -109,15 +110,21 @@ def liste():
     return sorted(set(tanimli) | set(_bekleyen))
 
 
+KOMUT_OMRU_SN = 60
+UYANIK_SN = 15
+_son_sorma = {}
+
+
 def komut(hedef, islem, deger=None):
     """Seçilen cihazda işlemi çalıştırır; telefon için sıraya koyar. Metin sonuç döner."""
     if hedef in _bekleyen:
-        _bekleyen[hedef] = (_bekleyen[hedef] + [{"islem": islem, "deger": deger}])[-20:]
-        return "telefona iletildi"
+        _bekleyen[hedef] = (_bekleyen[hedef] + [{"islem": islem, "deger": deger, "zaman": time.time()}])[-20:]
+        return "telefona iletildi" if time.time() - _son_sorma.get(hedef, 0) < UYANIK_SN else "telefon uykuda, uyanınca 1 dk içindeyse uygulanır"
     sonuc = _ajana_gonder(hedef, islem, deger)
     return f"{hedef} bağlı değil" if sonuc is None else sonuc
 
 
 def bekleyen(hedef):
+    _son_sorma[hedef] = time.time()
     cikan, _bekleyen[hedef] = _bekleyen.get(hedef, []), []
-    return cikan
+    return [k for k in cikan if time.time() - k["zaman"] < KOMUT_OMRU_SN]  # uyuyan telefon uyanınca eski komutlar birden çalışmasın
