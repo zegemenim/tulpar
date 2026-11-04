@@ -1,6 +1,7 @@
 """Android uygulamasının kullandığı uç noktalar: ana ekran, onaylar, görevler, sohbetler, konuşma, ses."""
 import json
 import pathlib
+import datetime
 import re
 import subprocess
 import tempfile
@@ -12,6 +13,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 
 import ayarlar
 import db
+import egitim_verisi
 import llm
 import ozet
 import para
@@ -366,7 +368,7 @@ def _durum_ozeti():
 
 # Bu kelimeler geçiyorsa bir iş isteniyor olabilir; geçmiyorsa sohbet sayılır ve araç kararı atlanır (hız için)
 ISTEK_IPUCU = re.compile(r"(?i)\b(ekle|kaydet|hatırlat|hatirlat|takvim|randevu|alarm|kur|aç|ac|kapat|başlat|durdur|araştır|arastir|"
-                         r"bul|ara\b|özetle|ozetle|yaz|gönder|gonder|taslak|söyle|soyle|kod|site|proje|düzelt|duzelt|ekran|görev|gorev)")
+                         r"bul|ara\b|bak|incele|whatsapp|grup|grub|konuş|özetle|ozetle|yaz|gönder|gonder|taslak|söyle|soyle|kod|site|proje|düzelt|duzelt|ekran|görev|gorev)")
 
 
 # Araç kararına eklenen kurallar: eksik bilgiyi sor, eklemeden önce özetleyip onay al (çok adımlı konuşma)
@@ -466,6 +468,24 @@ def _taslak_yaz(kisi, talimat):
     return {"tid": tid, "ad": ad, "metin": metin}
 
 
+def _whatsapp_oku(ad, metin):
+    """Adı geçen sohbetin son 3 gününü sahibinin sorusuna cevap için metin olarak verir. Kapalı sohbetler okunmaz."""
+    kat = lambda x: set(re.findall(r"\w{3,}", (x or "").replace("İ", "i").replace("I", "ı").lower()))
+    aranan = kat(ad or metin)
+    kapali = egitim_verisi.haric()
+    adaylar = [c for c in db.oku("SELECT sohbet_id, sohbet_adi, grup, MAX(zaman) AS son FROM mesajlar WHERE sohbet_adi IS NOT NULL GROUP BY sohbet_id")
+               if c["sohbet_id"] not in kapali and aranan & kat(c["sohbet_adi"])]
+    if not adaylar:
+        return {"hata": f"'{ad}' adında sohbet bulamadım"}
+    grup_mu = bool(re.search(r"(?i)\bgrub|\bgrup", metin))
+    c = max(adaylar, key=lambda x: (len(aranan & kat(x["sohbet_adi"])), bool(x["grup"]) == grup_mu, x["son"]))
+    mesajlar = db.oku("SELECT benden, gonderen_adi, metin, zaman FROM mesajlar WHERE sohbet_id=? AND zaman>? AND metin IS NOT NULL AND metin!='' ORDER BY zaman",
+                      c["sohbet_id"], c["son"] - 3 * 86400)
+    satirlar = [f"[{datetime.datetime.fromtimestamp(m['zaman'], ozet.TZ):%d.%m %H:%M}] {'Sen' if m['benden'] else m['gonderen_adi'] or c['sohbet_adi']}: {m['metin'][:300]}"
+                for m in ozet._secili(mesajlar, 80)]
+    return {"ad": c["sohbet_adi"], "metin": "\n".join(satirlar)}
+
+
 def arastirma_toparla():
     """Servis yeniden başlayınca yarım kalan araştırmaları (başlatıldı ama sonucu yazılmadı) soruyla yeniden başlatır."""
     for satir in db.oku("""SELECT DISTINCT sohbet_id FROM asistan_mesaj WHERE eylem LIKE '%"arastirma"%' AND zaman>?""", time.time() - 6 * 3600):
@@ -524,6 +544,14 @@ def _arac_uygula(metin, dogrudan=False, gecmis=None, sid=None):
         sistem = _sistem(bugun) + ("\nAz önce web'de araştırma başlattın: " + soru + ". Sonuç birkaç dakika içinde bu sohbete "
                                    "yazılacak ve bildirim gelecek. Bunu tek cümleyle söyle; cevabı tahmin etme, uydurma.")
         return arac, {"tur": "arastirma", "id": sid or 0}, sistem
+    elif arac == "whatsapp_ozet":
+        sonuc = _whatsapp_oku(p.get("sohbet"), metin)
+        if sonuc.get("hata"):
+            ek = f"\n{sonuc['hata']}. Bunu söyle ve sohbetin adını sor."
+        else:
+            log(f"whatsapp sohbeti okundu: {sonuc['ad']}")
+            ek = (f"\nWhatsApp sohbetine ERİŞİMİN VAR, \"{sonuc['ad']}\" sohbetinin son mesajları aşağıda. Sahibinin sorusunu YALNIZCA bunlara göre cevapla, "
+                  f"hangi sohbete baktığını söyle; mesajlarda yoksa 'konuşulmamış' de, uydurma.\n\n{sonuc['metin']}")
     elif arac == "whatsapp_taslak":
         sonuc = _taslak_yaz(p.get("kisi"), metin)  # sahibin tüm sözü: araç parametresi bilgiyi kısaltabiliyor
         if sonuc.get("tid"):
